@@ -581,9 +581,10 @@ def search():
     if query == '':
         return
 
-    url = plugin.url_for(do_search, query=query)
-    xbmc.executebuiltin('Container.Update("%s", "replace")' % url)
     xbmcplugin.endOfDirectory(handle, cacheToDisc=False)
+    xbmc.sleep(100)
+    url = plugin.url_for(do_search, query=query)
+    xbmc.executebuiltin('Container.Update(%s, replace)' % url, False)
 
 @plugin.route('/search/<query>')
 def do_search(query):
