@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 class KyivstarRequest:
     def __init__(self, device_id, locale):
+        self.session = requests.Session()
         self.base_api_url = "https://clients.production.vidmind.com/vidmind-stb-ws/{}"
         self.base_local_url = None
         self.base_auth_url = "https://kyivstar-auth.production.vidmind.com/kyivstar-auth/{}"
@@ -29,11 +30,11 @@ class KyivstarRequest:
         self.url = url
         try:
             if data is None and json is None:
-                response = requests.get(url, headers=self.headers, cookies=cookies)
+                response = self.session.get(url, headers=self.headers, cookies=cookies)
             elif data is not None:
-                response = requests.post(url, data=data, headers=self.headers, cookies=cookies)
+                response = self.session.post(url, data=data, headers=self.headers, cookies=cookies)
             elif json is not None:
-                response = requests.post(url, json=json, headers=self.headers, cookies=cookies)
+                response = self.session.post(url, json=json, headers=self.headers, cookies=cookies)
             if ret:
                 if response.status_code == 200:
                     result = response.json() if ret_json else response.text
