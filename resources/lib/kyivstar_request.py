@@ -23,7 +23,7 @@ class KyivstarRequest:
     def set_base_local_url_port(self, port):
         self.base_local_url = "http://127.0.0.1:%s/{}" % port
 
-    def send(self, url, data=None, json=None, ret=True, ret_json=True, cookies=None):
+    def send(self, url, data=None, json=None, ret=True, ret_json=True, ret_binary=False, cookies=None):
         result = None
         self.error = None
         self.recoverable = True
@@ -37,7 +37,7 @@ class KyivstarRequest:
                 response = self.session.post(url, json=json, headers=self.headers, cookies=cookies)
             if ret:
                 if response.status_code == 200:
-                    result = response.json() if ret_json else response.text
+                    result = response.content if ret_binary else (response.json() if ret_json else response.text)
                 else:
                     try:
                         result = response.json()
