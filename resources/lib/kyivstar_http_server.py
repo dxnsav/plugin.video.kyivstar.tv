@@ -14,8 +14,8 @@ class HttpGetHandler(BaseHTTPRequestHandler):
         asset_id = query['asset'][0]
         epg = query.get('epg', [None])[0]
         epg = epg if epg is None else int(epg)
-
-        content = self.server.stream_manager.get_playlist_content(asset_id, epg)
+        virtual = query.get('virtual', ['true'])[0].lower() == 'true'
+        content = self.server.stream_manager.get_playlist_content(asset_id, virtual, epg)
         return 'application/vnd.apple.mpegurl', content.encode('utf-8') if content is not None else None
 
     def handle_get_chunklist(self, url_query):
@@ -26,6 +26,16 @@ class HttpGetHandler(BaseHTTPRequestHandler):
         stream_id = int(query['stream'][0])
         content = self.server.stream_manager.get_chunklist_content(asset_id, stream_id, epg)
         return 'application/vnd.apple.mpegurl', content.encode('utf-8') if content is not None else None
+
+    def handle_get_segment(self, url_query):
+        query = parse_qs(url_query)
+        asset_id = query['asset'][0]
+        epg = query.get('epg', [None])[0]
+        epg = epg if epg is None else int(epg)
+        stream_id = int(query['stream'][0])
+        segment_id = int(query['segment'][0])
+        content = self.server.stream_manager.get_segment_content(asset_id, stream_id, segment_id, epg)
+        return 'video/MP2T', content if content is not None else None
 
     def handle_get_channels(self):
         service = self.server.service
@@ -184,6 +194,8 @@ class HttpGetHandler(BaseHTTPRequestHandler):
             content_type, content = self.handle_get_playlist(url.query)
         elif url.path == '/chunklist.m3u8':
             content_type, content = self.handle_get_chunklist(url.query)
+        elif url.path == '/segment.ts':
+            content_type, content = self.handle_get_segment(url.query)
         elif url.path == '/get_channels':
             content_type, content = self.handle_get_channels()
         elif url.path == '/get_channel':
@@ -255,6 +267,7 @@ class KyivstarHttpServer(object):
         self.httpd.shutdown()
         self.httpd.server_close()
         self.server_thread.join()
+        self.httpd.stream_manager.segment_cache.stop()
 
         self.httpd = None
         self.server_thread = None

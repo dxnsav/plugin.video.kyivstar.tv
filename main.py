@@ -351,12 +351,13 @@ def logout():
     service.addon.setSetting('session_id', '')
     service.set_session_status(SessionStatus.EMPTY)
 
-def get_local_elem_stream_url(asset_id, epg=None):
+def get_local_elem_stream_url(asset_id, virtual, epg=None):
     service.request.error = None
     port = int(service.addon.getSetting('live_stream_server_port'))
+    url = 'http://127.0.0.1:%s/playlist.m3u8?asset=%s&virtual=%s' % (port, asset_id, str(virtual).lower())
     if epg is None:
-        return 'http://127.0.0.1:%s/playlist.m3u8?asset=%s' % (port, asset_id)
-    return 'http://127.0.0.1:%s/playlist.m3u8?asset=%s&epg=%s' % (port, asset_id, epg)
+        return url
+    return url + ('&epg=%s' % epg)
 
 @plugin.route('/play/<videoid>')
 def play(videoid):
@@ -382,15 +383,20 @@ def play(videoid):
 
     use_stream_manager = (service.addon.getSetting('live_stream_server_enabled') == 'true')
     remove_ads = (service.addon.getSetting('remove_ads_in_catchup_mode') == 'true')
+    ip_live_segment_cache = (service.addon.getSetting('segment_cache_ip_live_enabled') == 'true')
+    ip_catchup_segment_cache = (service.addon.getSetting('segment_cache_ip_catchup_enabled') == 'true')
+    virtual_segment_cache = (service.addon.getSetting('segment_cache_virtual_enabled') == 'true')
 
     url = ''
     if is_virtual:
-        if (is_live and use_stream_manager) or (not is_live and remove_ads):
-            url = get_local_elem_stream_url(asset_id, epg)
+        if (is_live and use_stream_manager) or (not is_live and remove_ads) or virtual_segment_cache:
+            url = get_local_elem_stream_url(asset_id, is_virtual, epg)
         else:
             url = service.request.get_elem_stream_url(user_id, session_id, asset_id, virtual=True, date=epg)
     else:
-        if is_live:
+        if (is_live and ip_live_segment_cache) or (not is_live and ip_catchup_segment_cache):
+            url = get_local_elem_stream_url(asset_id, is_virtual, epg)
+        elif is_live:
             url = service.request.get_elem_stream_url(user_id, session_id, asset_id, virtual=False)
         else:
             url = service.request.get_elem_playback_stream_url(user_id, session_id, asset_id, epg)

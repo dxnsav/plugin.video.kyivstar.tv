@@ -332,6 +332,35 @@
                     <control type="toggle" />
                 </setting>
             </group>
+            <group id="group_12" label="30045">
+                <setting id="segment_cache_ip_live_enabled" type="boolean" label="30046" help="-1">
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="segment_cache_ip_catchup_enabled" type="boolean" label="30047" help="-1">
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="segment_cache_virtual_enabled" type="boolean" label="30048" help="-1">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+                <setting id="segment_cache_size" type="integer" label="30049" help="-1">
+                    <level>0</level>
+                    <default>120</default>
+                    <constraints>
+                        <minimum>0</minimum>
+                        <step>1</step>
+                        <maximum>600</maximum>
+                    </constraints>
+                    <control type="slider" format="integer">
+                        <formatlabel>14045</formatlabel>
+                    </control>
+                </setting>
+            </group>
         </category>
         <category id="iptv_simple_client" label="30034">
             <group id="group_9" label="30035">

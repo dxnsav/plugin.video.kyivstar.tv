@@ -182,6 +182,26 @@ msgctxt "#30031"
 msgid "Remove ads in catchup mode"
 msgstr "Видалити рекламу в режимі наздоганяння"
 
+msgctxt "#30045"
+msgid "Segment cache manager (RAM)"
+msgstr "Менеджер кешу сегментів (ОЗП)"
+
+msgctxt "#30046"
+msgid "Enable for general channels in live mode"
+msgstr "Увімкнути для звичайних каналів у режимі прямого ефіру"
+
+msgctxt "#30047"
+msgid "Enable for general channels in catch-up mode"
+msgstr "Увімкнути для звичайних каналів у режимі наздоганяння"
+
+msgctxt "#30048"
+msgid "Enable for virtual channels and VOD"
+msgstr "Увімкнути для віртуальних каналів та VOD"
+
+msgctxt "#30049"
+msgid "Cache size"
+msgstr "Розмір кешу"
+
 # IPTV Simple Client category
 msgctxt "#30034"
 msgid "IPTV Simple Client"
