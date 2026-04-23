@@ -33,7 +33,7 @@ class HttpGetHandler(BaseHTTPRequestHandler):
         epg = query.get('epg', [None])[0]
         epg = epg if epg is None else int(epg)
         stream_id = int(query['stream'][0])
-        segment_id = int(query['segment'][0])
+        segment_id = float(query['segment'][0])
         content = self.server.stream_manager.get_segment_content(asset_id, stream_id, segment_id, epg)
         return 'video/MP2T', content if content is not None else None
 

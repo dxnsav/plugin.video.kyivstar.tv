@@ -108,7 +108,7 @@ class Stream():
         return self.get_segment_end_time(-1)
 
     def is_in_bound(self, cur_time):
-        return self.get_start_time() <= cur_time <= self.get_end_time()
+        return self.get_start_time() <= cur_time < self.get_end_time()
 
     def get_segment_index(self, cur_time):
         if len(self.segments) == 0:
@@ -270,7 +270,6 @@ class ChannelState():
         if cached and len(stream.segments) > 0:
             reload = False
         if reload:
-            xbmc.log("KyivstarStreamManager get_stream: loading stream for the %s program index and the %s stream id" % (program_index, stream_id), xbmc.LOGDEBUG)
             text = self.service.request.send(stream.url, ret_json=False)
             if self.service.request.error or text is None:
                 if self.service.request.recoverable:
@@ -279,7 +278,6 @@ class ChannelState():
                 return None
             stream.parse(text, self.service.request.url)
             stream.set_start_time(self.start_time)
-        xbmc.log("KyivstarStreamManager get_stream: got stream for the %s program index and the %s stream id with the %s segments" % (program_index, stream_id, len(stream.segments)), xbmc.LOGDEBUG)
 
         return stream
 
@@ -289,7 +287,6 @@ class ChannelState():
 
         program_list = self.get_program_list(date_index)
         if index < len(program_list):
-            xbmc.log("KyivstarStreamManager get_next_program_index: %s -> %s " % (program_index, (date_index, index)), xbmc.LOGDEBUG)
             return (date_index, index)
 
         date_index += timedelta(days=1)
@@ -297,10 +294,54 @@ class ChannelState():
 
         program_list = self.get_program_list(date_index)
         if index < len(program_list):
-            xbmc.log("KyivstarStreamManager get_next_program_index: %s -> %s " % (program_index, (date_index, index)), xbmc.LOGDEBUG)
             return (date_index, index)
 
         return None
+
+    def get_stream_segments(self, stream_id, program_index, start_date=None, end_date=None):
+        media_sequence = self.media_sequence
+        start_time = self.start_time
+        while True:
+            stream = self.get_stream(stream_id, program_index, cached=True)
+            if stream is None:
+                break
+
+            stream.set_start_time(start_time)
+            switch_program = False
+            start_index = 0
+            end_index = len(stream.segments)
+            if start_date is not None:
+                if stream.is_in_bound(start_date.timestamp()):
+                    start_index = stream.get_segment_index(start_date.timestamp())
+                else:
+                    program_index = self.get_next_program_index(program_index)
+                    if program_index is None:
+                        break
+
+                    media_sequence += len(stream.segments)
+                    start_time = stream.get_end_time()
+                    continue
+            if end_date is not None:
+                if stream.is_in_bound(end_date.timestamp()):
+                    end_index = stream.get_segment_index(end_date.timestamp())
+                else:
+                    switch_program = True
+
+            for i in range(start_index, end_index):
+                yield media_sequence + i, stream.segments[i], stream.get_segment_start_time(i)
+
+            if not stream.finished or not switch_program:
+                break
+
+            program_index = self.get_next_program_index(program_index)
+            if program_index is None:
+                break
+
+            yield -1, { "url" : None, "tags" : [ '#EXT-X-DISCONTINUITY' ] }, None
+
+            start_date = None
+            media_sequence += len(stream.segments)
+            start_time = stream.get_end_time()
 
 class SegmentCacheManager():
     def __init__(self, service):
@@ -397,11 +438,11 @@ class SegmentCacheManager():
                 return None
             return cache_entry["content"]
 
-    def update(self, asset_id, segment_id, cache_list):
+    def update(self, asset_id, cache_list):
         with self.lock:
             valid_keys = set()
-            for i, url in enumerate(cache_list):
-                key = (asset_id, segment_id + i)
+            for segment_id, url in cache_list:
+                key = (asset_id, segment_id)
                 valid_keys.add(key)
                 cache_entry = self.cache.get(key)
                 if not cache_entry:
@@ -548,12 +589,8 @@ class KyivstarStreamManager():
                 stream.set_start_time(channel_state.start_time)
 
         start_index = 0
-        end_index = len(stream.segments)
         if live:
             start_index = stream.get_segment_index(date.timestamp())
-            end_date = date + timedelta(seconds=self.window_length)
-            if stream.is_in_bound(end_date.timestamp()):
-                end_index = stream.get_segment_index(end_date.timestamp())
 
         text = "#EXTM3U\n#EXT-X-VERSION:3\n"
         text += "#EXT-X-TARGETDURATION:%s\n" % stream.target_duration
@@ -565,55 +602,26 @@ class KyivstarStreamManager():
         base_url = f"http://{self.server.server_address[0]}:{self.server.server_address[1]}/segment.ts"
         base_url += f"?asset={asset_id}&stream={stream_id}{'' if epg is None else '&epg=' + str(epg)}&segment="
 
-        base_sequence = channel_state.media_sequence
-        for i in range(start_index, end_index):
-            segment = stream.segments[i]
-            if live:
-                text += '#EXT-X-PROGRAM-DATE-TIME:%s\n' % datetime.fromtimestamp(stream.get_segment_start_time(i), tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        start_date = None
+        end_date = None
+        if live:
+            start_date = date
+            end_date = date + timedelta(seconds=self.window_length)
+
+        for segment_id, segment, start_time in channel_state.get_stream_segments(stream_id, program_index, start_date=start_date, end_date=end_date):
+            if live and start_time:
+                text += '#EXT-X-PROGRAM-DATE-TIME:%s\n' % datetime.fromtimestamp(start_time, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
             for tag in segment['tags']:
                 text += tag + '\n'
+            if not segment["url"]:
+                continue
             if cache_enabled:
-                text += base_url + str(base_sequence + i) + '\n'
+                text += base_url + str(start_time) + '\n'
             else:
                 text += segment['url'] + '\n'
 
-        xbmc.log("KyivstarStreamManager get_chunklist_content: asset_id=%s stream_id=%s epg=%s disc=%s program_index=%s stream_segments=%s start_index=%s end_index=%s" % (asset_id, stream_id, epg, discontinuity_sequence, program_index, len(stream.segments), start_index, end_index), xbmc.LOGDEBUG)
-
-        if not live or start_index >= len(stream.segments):
+        if not live:
             text += '#EXT-X-ENDLIST\n'
-            return text
-
-        if stream.is_in_bound(end_date.timestamp()):
-            return text
-
-        base_sequence += len(stream.segments)
-        start_time = stream.get_end_time()
-        program_index = channel_state.get_next_program_index(program_index)
-
-        stream = channel_state.get_stream(stream_id, program_index)
-        if stream is None:
-            return None
-
-        stream.set_start_time(start_time)
-
-        start_index = 0
-        end_index = len(stream.segments)
-        if stream.is_in_bound(end_date.timestamp()):
-            end_index = stream.get_segment_index(end_date.timestamp())
-
-        for i in range(start_index, end_index):
-            segment = stream.segments[i]
-            if i == start_index:
-                text += '#EXT-X-DISCONTINUITY\n'
-            text += '#EXT-X-PROGRAM-DATE-TIME:%s\n' % datetime.fromtimestamp(stream.get_segment_start_time(i), tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
-            for tag in segment['tags']:
-                text += tag + '\n'
-            if cache_enabled:
-                text += base_url + str(base_sequence + i) + '\n'
-            else:
-                text += segment['url'] + '\n'
-
-        xbmc.log("KyivstarStreamManager get_chunklist_content: asset_id=%s stream_id=%s epg=%s live=%s program_index=%s stream_segments=%s start_index=%s end_index=%s" % (asset_id, stream_id, epg, live, program_index, len(stream.segments), start_index, end_index), xbmc.LOGDEBUG)
 
         return text
 
@@ -644,36 +652,14 @@ class KyivstarStreamManager():
         if stream is None:
             return None
 
-        cache_start = segment_id - channel_state.media_sequence
-        if cache_start >= len(stream.segments):
-            cache_start -= len(stream.segments)
-            program_index = channel_state.get_next_program_index(program_index)
-
-            stream = channel_state.get_stream(stream_id, program_index, cached=True)
-            if stream is None:
-                return None
-
         cache_size = int(self.service.addon.getSetting('segment_cache_size'))
-        cache_list = []
-        i = cache_start
-        while i < len(stream.segments) and cache_size > 0:
-            cache_list.append(stream.segments[i]["url"])
-            cache_size -= stream.segments_end[i] - stream.segments_start[i]
-            i += 1
+        start_date = datetime.fromtimestamp(segment_id)
+        end_date = start_date + timedelta(seconds=cache_size)
+        if not live and not stream.is_in_bound(end_date.timestamp()):
+            end_date = datetime.fromtimestamp(stream.get_end_time())
 
-        if live and stream.finished and cache_size > 0:
-            program_index = channel_state.get_next_program_index(program_index)
+        cache_list = [ (start_time, segment["url"]) for _, segment, start_time in channel_state.get_stream_segments(stream_id, program_index, start_date=start_date, end_date=end_date) if segment["url"]]
 
-            stream = channel_state.get_stream(stream_id, program_index, cached=True)
-            if stream is None:
-                return None
-
-            i = 0
-            while i < len(stream.segments) and cache_size > 0:
-                cache_list.append(stream.segments[i]["url"])
-                cache_size -= stream.segments_end[i] - stream.segments_start[i]
-                i += 1
-
-        self.segment_cache.update(asset_id, segment_id, cache_list)
+        self.segment_cache.update(asset_id, cache_list)
 
         return self.segment_cache.get(asset_id, segment_id)
