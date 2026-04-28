@@ -264,25 +264,25 @@ def login():
     if login_type == LoginDialog.CANCEL:
         return
 
-    profile = service.request.login_anonymous()
+    profile = service.request.login_anonymous().value
     if not is_profile_loaded(profile):
         return
 
     if login_type == LoginDialog.PHONENUMBER:
-        if not service.request.send_auth_otp(profile['sessionId'], phonenumber):
+        if not service.request.send_auth_otp(profile['sessionId'], phonenumber).value:
             loc_str = service.addon.getLocalizedString(30202) # 'Error during login. Check your logs for details.'
             xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_ERROR)
             return
 
         otp = xbmcgui.Dialog().input('Enter secret code', type=xbmcgui.INPUT_NUMERIC)
-        profile = service.request.login(profile['sessionId'], phonenumber, otp=otp)
+        profile = service.request.login(profile['sessionId'], phonenumber, otp=otp).value
         if not is_profile_loaded(profile):
             return
 
         service.addon.setSetting('phonenumber', phonenumber)
 
     elif login_type == LoginDialog.PERSONAL_ACCOUNT:
-        profile = service.request.login(profile['sessionId'], username, password=password)
+        profile = service.request.login(profile['sessionId'], username, password=password).value
 
         if not is_profile_loaded(profile):
             return
@@ -290,7 +290,7 @@ def login():
         service.addon.setSetting('username', username)
 
     elif login_type == LoginDialog.QR_CODE:
-        link_data = service.request.generate_link(profile['sessionId'])
+        link_data = service.request.generate_link(profile['sessionId']).value
         if 'code' not in link_data or 'link' not in link_data:
             loc_str = service.addon.getLocalizedString(30202) # 'Error during login. Check your logs for details.'
             xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_ERROR)
@@ -304,7 +304,7 @@ def login():
         while qr_code_form.active:
             elapsed_time = max(0, time.time() - start_time)
             if elapsed_time - last_elapsed_time >= 1:
-                is_signed_in = service.request.subscriber_signed_in(profile['sessionId'])
+                is_signed_in = service.request.subscriber_signed_in(profile['sessionId']).value
                 last_elapsed_time = elapsed_time
             if is_signed_in or elapsed_time > 180:
                 qr_code_form.close()
@@ -315,7 +315,7 @@ def login():
         if not is_signed_in:
             return
 
-        profile = service.request.get_profile(profile['sessionId'])
+        profile = service.request.get_profile(profile['sessionId']).value
         if not is_profile_loaded(profile):
             return
 
@@ -340,24 +340,18 @@ def logout():
     user_id = service.addon.getSetting('user_id')
     session_id = service.addon.getSetting('session_id')
 
-    if user_id != 'anonymous' and not service.request.logout(session_id) and service.request.recoverable:
-        loc_str = service.addon.getLocalizedString(30203) # 'Error during logout. Check your logs for details.'
-        xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_ERROR)
-        service.set_session_status(SessionStatus.INACTIVE)
-        return
+    if user_id != 'anonymous':
+        result = service.request.logout(session_id)
+        if not result.value and result.recoverable:
+            loc_str = service.addon.getLocalizedString(30203) # 'Error during logout. Check your logs for details.'
+            xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_ERROR)
+            service.set_session_status(SessionStatus.INACTIVE)
+            return
 
     service.addon.setSetting('logged', 'false')
     service.addon.setSetting('user_id', '')
     service.addon.setSetting('session_id', '')
     service.set_session_status(SessionStatus.EMPTY)
-
-def get_local_elem_stream_url(asset_id, virtual, epg=None):
-    service.request.error = None
-    port = int(service.addon.getSetting('live_stream_server_port'))
-    url = 'http://127.0.0.1:%s/playlist.m3u8?asset=%s&virtual=%s' % (port, asset_id, str(virtual).lower())
-    if epg is None:
-        return url
-    return url + ('&epg=%s' % epg)
 
 @plugin.route('/play/<videoid>')
 def play(videoid):
@@ -387,21 +381,21 @@ def play(videoid):
     ip_catchup_segment_cache = (service.addon.getSetting('segment_cache_ip_catchup_enabled') == 'true')
     virtual_segment_cache = (service.addon.getSetting('segment_cache_virtual_enabled') == 'true')
 
-    url = ''
     if is_virtual:
         if (is_live and use_stream_manager) or (not is_live and remove_ads) or virtual_segment_cache:
-            url = get_local_elem_stream_url(asset_id, is_virtual, epg)
+            result = service.request.local_get_elem_stream_url(service, asset_id, is_virtual, epg)
         else:
-            url = service.request.get_elem_stream_url(user_id, session_id, asset_id, virtual=True, date=epg)
+            result = service.request.get_elem_stream_url(user_id, session_id, asset_id, virtual=True, date=epg)
     else:
         if (is_live and ip_live_segment_cache) or (not is_live and ip_catchup_segment_cache):
-            url = get_local_elem_stream_url(asset_id, is_virtual, epg)
+            result = service.request.local_get_elem_stream_url(service, asset_id, is_virtual, epg)
         elif is_live:
-            url = service.request.get_elem_stream_url(user_id, session_id, asset_id, virtual=False)
+            result = service.request.get_elem_stream_url(user_id, session_id, asset_id, virtual=False)
         else:
-            url = service.request.get_elem_playback_stream_url(user_id, session_id, asset_id, epg)
+            result = service.request.get_elem_playback_stream_url(user_id, session_id, asset_id, epg)
 
-    if service.request.error:
+    url = result.value
+    if result.error:
         loc_str = service.addon.getLocalizedString(30216) # 'Error getting stream url. Check your logs for details.'
         xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_ERROR)
         xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
@@ -430,7 +424,7 @@ def play(videoid):
 
     if is_virtual and is_live and not use_stream_manager:
         # Set resume point of video to current time.
-        cur_program_epg = service.request.get_elem_cur_program_epg_data(session_id, asset_id)
+        cur_program_epg = service.request.get_elem_cur_program_epg_data(session_id, asset_id).value
         if 'start' in cur_program_epg and 'finish' in cur_program_epg:
             duration = cur_program_epg['finish']/1000 - cur_program_epg['start']/1000
             live_point = time.time() - cur_program_epg['start']/1000
@@ -441,8 +435,9 @@ def play(videoid):
 
 @plugin.route('/play_archive/<program_asset_id>')
 def play_archive(program_asset_id):
-    videoid = service.request.local_get_archive_videoid(program_asset_id)
-    if service.request.error:
+    result = service.request.local_get_archive_videoid(program_asset_id)
+    videoid = result.value
+    if result.error:
         loc_str = service.addon.getLocalizedString(30214) # 'Error accessing archive. Check your logs for details.'
         xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_ERROR)
         xbmcplugin.setResolvedUrl(handle, False, xbmcgui.ListItem())
@@ -546,7 +541,7 @@ def show_series(asset_id, season):
     limit = int(args.get('limit', [20])[0])
 
     if season == 0:
-        elem = service.request.get_asset_info(session_id, asset_id)
+        elem = service.request.get_asset_info(session_id, asset_id).value
         if len(elem) == 0:
             xbmcplugin.endOfDirectory(handle, cacheToDisc=True)
             return
@@ -561,7 +556,7 @@ def show_series(asset_id, season):
             xbmcplugin.addDirectoryItem(handle, url, li, isFolder=True)
 
     else:
-        elems = service.request.get_asset_tvgroup_info(session_id, asset_id, season, offset, limit)
+        elems = service.request.get_asset_tvgroup_info(session_id, asset_id, season, offset, limit).value
         for elem in elems:
             li = get_asset_list_item(elem)
             li.setProperty('IsPlayable', 'true')
@@ -595,7 +590,7 @@ def search():
 @plugin.route('/search/<query>')
 def do_search(query):
     session_id = service.addon.getSetting('session_id')
-    elems = service.request.get_search(session_id, query)
+    elems = service.request.get_search(session_id, query).value
     for elem in elems:
         if elem['assetType'] != 'MOVIE' and elem['assetType'] != 'SERIES':
             continue
@@ -644,7 +639,7 @@ def show_videos(area):
         }
 
     if select == 'filters':
-        filter_types = service.request.get_content_area_filters(session_id, area)
+        filter_types = service.request.get_content_area_filters(session_id, area).value
 
         filter_names = []
         for filter_type in filter_types:
@@ -689,7 +684,7 @@ def show_videos(area):
         xbmc.executebuiltin('Container.Update("%s")' % url)
 
     elif select == 'compilations':
-        compilations = service.request.get_compilations(session_id, area)
+        compilations = service.request.get_compilations(session_id, area).value
         compilations = [i for i in compilations if i['compilationElementType'] != 'CONTENT_GROUP']
 
         names = [i['displayName'] for i in compilations]
@@ -706,7 +701,7 @@ def show_videos(area):
         xbmc.executebuiltin('Container.Update("%s")' % url)
 
     elif select == 'sort':
-        sort_filters = service.request.get_sort_filters(session_id)
+        sort_filters = service.request.get_sort_filters(session_id).value
 
         names = [i['displayName'] for i in sort_filters]
         heading = controls[select][locale]
@@ -739,7 +734,7 @@ def show_videos(area):
             del args['select']
             xbmcplugin.addDirectoryItem(handle, url, li, isFolder=False)
 
-    elems = service.request.get_content_area_elems(session_id, compilation, filters, sort, offset, limit)
+    elems = service.request.get_content_area_elems(session_id, compilation, filters, sort, offset, limit).value
     for elem in elems:
         li = get_asset_list_item(elem)
         if elem['assetType'] == 'SERIES':
@@ -825,7 +820,7 @@ def show_archive():
             return
 
         filter_type = filter_type_ids[index]
-        elems = service.request.local_get_archive_filters(filter_type)
+        elems = service.request.local_get_archive_filters(filter_type).value
 
         heading = filter_types[filter_type][locale]
         preselect = []
@@ -902,7 +897,7 @@ def show_archive():
 
     elif select == 'channels':
         channels = service.get_enabled_channels()
-        activated_channel_ids = set(service.request.local_get_archive_channels())
+        activated_channel_ids = set(service.request.local_get_archive_channels().value)
 
         names = []
         preselect = []
@@ -941,7 +936,7 @@ def show_archive():
             del args['select']
             xbmcplugin.addDirectoryItem(handle, url, li, isFolder=False)
 
-    elems = service.request.local_get_archive(urlencode(args, doseq=True))
+    elems = service.request.local_get_archive(urlencode(args, doseq=True)).value
     for elem in elems:
         li = get_asset_list_item(elem)
         li.setProperty('IsPlayable', 'true')
@@ -975,7 +970,7 @@ def reset_archive():
 
 @plugin.route('/channel_manager')
 def show_channel_manager():
-    channels = service.request.local_get_channels()
+    channels = service.request.local_get_channels().value
 
     loc_str = service.addon.getLocalizedString(30501) # 'Disabled'
     li = xbmcgui.ListItem(label='%s (%s)' % (loc_str, len(channels['disabled'])))
@@ -1037,7 +1032,7 @@ def show_channel_manager():
 
 @plugin.route('/channel_manager/dir/<category>')
 def show_dir(category):
-    channels = service.request.local_get_channels()
+    channels = service.request.local_get_channels().value
 
     for channel in channels[category]:
         li = xbmcgui.ListItem(label=channel['name'])
@@ -1064,7 +1059,7 @@ def send_command(command):
 
 @plugin.route('/channel_manager/channel/<asset>')
 def show_channel(asset):
-    channel = service.request.local_get_channel(asset)
+    channel = service.request.local_get_channel(asset).value
 
     loc_str = service.addon.getLocalizedString(30507) # 'Preview'
     li = xbmcgui.ListItem(label=loc_str)
@@ -1148,7 +1143,7 @@ def show_channel(asset):
 @plugin.route('/channel_manager/channel/<asset>/<_property>')
 def update_channel(asset, _property):
     if _property == 'move':
-        channels = service.request.local_get_channels()
+        channels = service.request.local_get_channels().value
         position = 0
         for channel in channels['enabled']:
             if channel['id'] == asset:
@@ -1162,7 +1157,7 @@ def update_channel(asset, _property):
         xbmcplugin.endOfDirectory(handle, cacheToDisc=False)
         return
 
-    channel = service.request.local_get_channel(asset)
+    channel = service.request.local_get_channel(asset).value
 
     if _property == 'enabled':
         value = 'unused'

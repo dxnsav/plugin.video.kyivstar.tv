@@ -172,8 +172,8 @@ class ArchiveManager():
         channel_id = self.channel_ids[0]
 
         result = service.request.get_elem_epg_data(session_id, channel_id)
-        if service.request.error:
-            if service.request.recoverable:
+        if result.error:
+            if result.recoverable:
                 service.set_session_status(SessionStatus.INACTIVE)
                 return
             else:
@@ -182,6 +182,7 @@ class ArchiveManager():
                 return
 
         del self.channel_ids[0]
+        result = result.value
         if len(result) == 0:
             return
 
@@ -478,8 +479,8 @@ class ArchiveManager():
         program_id = self.program_ids[0]
 
         result = service.request.get_asset_info(session_id, program_id)
-        if service.request.error:
-            if service.request.recoverable:
+        if result.error:
+            if result.recoverable:
                 service.set_session_status(SessionStatus.INACTIVE)
                 return
             else:
@@ -488,6 +489,7 @@ class ArchiveManager():
                 return
 
         del self.program_ids[0]
+        result = result.value
         if len(result) == 0:
             return
 

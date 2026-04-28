@@ -167,7 +167,8 @@ class ChannelState():
             return self.program_list[date_index]
 
         session_id = self.service.addon.getSetting('session_id')
-        epg_data = self.service.request.get_elem_epg_data(session_id, self.asset_id, date=date_index, days_before=0, days_after=0)
+        result = self.service.request.get_elem_epg_data(session_id, self.asset_id, date=date_index, days_before=0, days_after=0)
+        epg_data = result.value
         if len(epg_data) == 0:
             xbmc.log("KyivstarStreamManager get_program_list: can't load epg data", xbmc.LOGERROR)
             return []
@@ -225,13 +226,14 @@ class ChannelState():
         session_id = self.service.addon.getSetting('session_id')
         user_id = self.service.addon.getSetting('user_id')
         if not self.virtual and epg is not None:
-            url = self.service.request.get_elem_playback_stream_url(user_id, session_id, self.asset_id, date=epg)
+            result = self.service.request.get_elem_playback_stream_url(user_id, session_id, self.asset_id, date=epg)
         else:
-            url = self.service.request.get_elem_stream_url(user_id, session_id, self.asset_id, virtual=self.virtual, date=epg)
-        text = self.service.request.send(url, ret_json=False)
-        url = self.service.request.url
-        if self.service.request.error or text is None:
-            xbmc.log("KyivstarStreamManager get_streams: %s" % self.service.request.error, xbmc.LOGERROR)
+            result = self.service.request.get_elem_stream_url(user_id, session_id, self.asset_id, virtual=self.virtual, date=epg)
+        result = self.service.request.send(result.value, ret_json=False)
+        text = result.value
+        url = result.url
+        if result.error or text is None:
+            xbmc.log("KyivstarStreamManager get_streams: %s" % result.error, xbmc.LOGERROR)
             return None
 
         streams = {}
@@ -270,13 +272,14 @@ class ChannelState():
         if cached and len(stream.segments) > 0:
             reload = False
         if reload:
-            text = self.service.request.send(stream.url, ret_json=False)
-            if self.service.request.error or text is None:
-                if self.service.request.recoverable:
+            result = self.service.request.send(stream.url, ret_json=False)
+            text = result.value
+            if result.error or text is None:
+                if result.recoverable:
                     return stream
-                xbmc.log("KyivstarStreamManager get_stream: %s" % self.service.request.error, xbmc.LOGERROR)
+                xbmc.log("KyivstarStreamManager get_stream: %s" % result.error, xbmc.LOGERROR)
                 return None
-            stream.parse(text, self.service.request.url)
+            stream.parse(text, result.url)
             stream.set_start_time(self.start_time)
 
         return stream
@@ -378,11 +381,12 @@ class SegmentCacheManager():
                 self.process_key = key
                 url = cache_entry["url"]
 
-            content = self.service.request.send(url, ret_json=False, ret_binary=True)
-            if self.service.request.error:
-                xbmc.log("KyivstarStreamManager SegmentCacheManager.process: %s" % self.service.request.error, xbmc.LOGERROR)
+            result = self.service.request.send(url, ret_json=False, ret_binary=True)
+            content = result.value
+            if result.error:
+                xbmc.log("KyivstarStreamManager SegmentCacheManager.process: %s" % result.error, xbmc.LOGERROR)
                 content = None
-            if self.service.request.error and wait_time is not None:
+            if result.error and wait_time is not None:
                 wait_time = min(wait_time + 0.5, 10)
             else:
                 wait_time = 0.5

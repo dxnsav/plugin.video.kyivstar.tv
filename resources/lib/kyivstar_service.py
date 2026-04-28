@@ -177,13 +177,14 @@ class KyivstarService:
         if session_id == '':
             self.set_session_status(SessionStatus.EMPTY)
         elif user_if == 'anonymous':
-            profile = self.request.login_anonymous()
+            result = self.request.login_anonymous()
+            profile = result.value
             if 'userId' not in profile or 'sessionId' not in profile:
                 self.set_session_status(SessionStatus.INACTIVE)
                 return
             self.addon.setSetting('session_id', profile['sessionId'])
             self.set_session_status(SessionStatus.ACTIVE)
-        elif len(self.request.get_profiles(session_id)) > 0:
+        elif len(self.request.get_profiles(session_id).value) > 0:
             self.set_session_status(SessionStatus.ACTIVE)
         else:
             self.set_session_status(SessionStatus.INACTIVE)

@@ -358,10 +358,11 @@ class SaveEPGTask(Task):
         for day in to_remove:
             del day_programmes[day]
 
-        epg_data = service.request.get_elem_epg_data(session_id, channel.id)
+        result = service.request.get_elem_epg_data(session_id, channel.id)
+        epg_data = result.value
 
-        if service.request.error:
-            if service.request.recoverable:
+        if result.error:
+            if result.recoverable:
                 xbmc.log("KyivstarService step_save_epg: recoverable error occurred while downloading asset %s(%s) epg data." % (channel.id, channel.name), xbmc.LOGDEBUG)
                 service.set_session_status(SessionStatus.INACTIVE)
                 self.channels.append(channel)

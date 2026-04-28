@@ -181,8 +181,9 @@ class ChannelManager():
     def download(self, service):
         session_id = service.addon.getSetting('session_id')
 
-        groups = service.request.get_live_channels_groups(session_id)
+        result = service.request.get_live_channels_groups(session_id)
 
+        groups = result.value
         if len(groups) == 0:
             return False
 
@@ -200,7 +201,9 @@ class ChannelManager():
                 continue
             if not include_favorites_group and group_type == 'FAVORITES':
                 continue
-            channels = service.request.get_group_elems(session_id, group_id)
+
+            result = service.request.get_group_elems(session_id, group_id)
+            channels = result.value
             for channel in channels:
                 if not channel.get('purchased', None):
                     continue
