@@ -216,8 +216,8 @@ class ChannelState():
             return None
         return program_list[index]
 
-    def get_streams(self, program_index):
-        if program_index in self.streams:
+    def get_streams(self, program_index, force=False):
+        if program_index in self.streams and not force:
             return self.streams[program_index]
 
         program = self.get_program(program_index)
@@ -512,7 +512,8 @@ class KyivstarStreamManager():
         if program_index is None and date is not None:
             return None
 
-        streams = channel_state.get_streams(program_index)
+        is_general = not channel_state.virtual
+        streams = channel_state.get_streams(program_index, force=is_general)
         if streams is None:
             return None
 
