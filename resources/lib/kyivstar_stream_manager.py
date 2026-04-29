@@ -251,7 +251,7 @@ class ChannelState():
         self.streams[program_index] = streams
         return streams
 
-    def get_stream(self, stream_id, program_index, cached=False):
+    def get_stream(self, stream_id, program_index):
         streams = self.get_streams(program_index)
         if streams is None:
             return None
@@ -267,24 +267,51 @@ class ChannelState():
                 xbmc.log("KyivstarStreamManager get_stream: streams for the %s program index doesn't contain an alternative stream for the %s id" % (program_index, stream_id), xbmc.LOGERROR)
                 return None
 
-        stream = streams[stream_id]
-        reload = not stream.finished
-        if cached and len(stream.segments) > 0:
-            reload = False
-        if reload:
-            result = self.service.request.send(stream.url, ret_json=False)
-            text = result.value
-            if result.error or text is None:
-                if result.recoverable:
-                    return stream
-                xbmc.log("KyivstarStreamManager get_stream: %s" % result.error, xbmc.LOGERROR)
-                return None
-            stream.parse(text, result.url)
-            stream.set_start_time(self.start_time)
+        return streams[stream_id]
 
-        return stream
+    def load_stream(self, stream):
+        if stream.finished:
+            return True
+        result = self.service.request.send(stream.url, ret_json=False)
+        text = result.value
+        if result.error or text is None:
+            if result.recoverable:
+                return True
+            xbmc.log("KyivstarStreamManager get_stream: %s" % result.error, xbmc.LOGERROR)
+            return False
+        stream.parse(text, result.url)
+        return True
+
+    def load_streams(self, stream_id, program_index, end_date):
+        start_time = self.start_time
+        while True:
+            stream = self.get_stream(stream_id, program_index)
+            if stream is None:
+                break
+
+            if not self.load_stream(stream):
+                break
+
+            stream.set_start_time(start_time)
+
+            if end_date is None:
+                break
+
+            if stream.is_in_bound(end_date.timestamp()):
+                break
+
+            if not stream.finished:
+                break
+
+            program_index = self.get_next_program_index(program_index)
+            if program_index is None:
+                break
+
+            start_time = stream.get_end_time()
 
     def get_next_program_index(self, program_index):
+        if program_index is None:
+            return None
         date_index = program_index[0]
         index = program_index[1] + 1
 
@@ -305,7 +332,7 @@ class ChannelState():
         media_sequence = self.media_sequence
         start_time = self.start_time
         while True:
-            stream = self.get_stream(stream_id, program_index, cached=True)
+            stream = self.get_stream(stream_id, program_index)
             if stream is None:
                 break
 
@@ -569,6 +596,13 @@ class KyivstarStreamManager():
         if stream is None:
             return None
 
+        end_date = None
+        if live:
+            end_date = date + timedelta(seconds=self.window_length)
+            if cache_enabled:
+                end_date = end_date + timedelta(seconds=cache_size)
+        channel_state.load_streams(stream_id, program_index, end_date)
+
         if live:
             if channel_state.program_index is None:
                 channel_state.program_index = program_index
@@ -653,7 +687,7 @@ class KyivstarStreamManager():
         if program_index is None and date is not None:
             return None
 
-        stream = channel_state.get_stream(stream_id, program_index, cached=True)
+        stream = channel_state.get_stream(stream_id, program_index)
         if stream is None:
             return None
 
