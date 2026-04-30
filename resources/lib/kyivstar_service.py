@@ -201,6 +201,39 @@ class KyivstarService:
 
         return channel_manager.enabled
 
+    def save_uncacheable_channels(self, uncacheable_channels):
+        if hasattr(self, 'uncacheable_channels'):
+            self.uncacheable_channels = None
+        user_data_path = xbmcvfs.translatePath(self.addon.getAddonInfo('profile'))
+        uncacheable_channels_path = os.path.join(user_data_path, 'uncacheable_channels.txt')
+        with xbmcvfs.File(uncacheable_channels_path, 'w') as f:
+            f.write('\n'.join(uncacheable_channels))
+
+    def load_uncacheable_channels(self):
+        uncacheable_channels = set()
+
+        user_data_path = xbmcvfs.translatePath(self.addon.getAddonInfo('profile'))
+        uncacheable_channels_path = os.path.join(user_data_path, 'uncacheable_channels.txt')
+        if xbmcvfs.exists(uncacheable_channels_path):
+            with xbmcvfs.File(uncacheable_channels_path) as f:
+                uncacheable_channels = set([line.strip() for line in f.read().splitlines()])
+
+        need_save = False
+        for channel in self.get_enabled_channels():
+            if not channel.catchup and channel.id not in uncacheable_channels:
+                uncacheable_channels.add(channel.id)
+                need_save = True
+
+        if need_save:
+            self.save_uncacheable_channels(uncacheable_channels)
+
+        return uncacheable_channels
+
+    def get_uncacheable_channels(self):
+        if not hasattr(self, 'uncacheable_channels') or self.uncacheable_channels is None:
+            self.uncacheable_channels = self.load_uncacheable_channels()
+        return self.uncacheable_channels
+
     def restart_iptv_simple(self):
         xbmc.executeJSONRPC('{"jsonrpc":"2.0","id":1,"method":"Addons.SetAddonEnabled","params":{"addonid":"pvr.iptvsimple","enabled":false}}')
         xbmc.sleep(1000)

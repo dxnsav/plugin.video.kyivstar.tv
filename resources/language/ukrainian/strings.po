@@ -488,3 +488,11 @@ msgstr "Налаштування"
 msgctxt "#30525"
 msgid "Input search query"
 msgstr "Введіть пошуковий запит"
+
+msgctxt "#30526"
+msgid "Segment cache enabled"
+msgstr "Кеш сегментів увімкнено"
+
+msgctxt "#30527"
+msgid "Segment cache disabled"
+msgstr "Кеш сегментів вимкнено"

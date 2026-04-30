@@ -381,6 +381,11 @@ def play(videoid):
     ip_catchup_segment_cache = (service.addon.getSetting('segment_cache_ip_catchup_enabled') == 'true')
     virtual_segment_cache = (service.addon.getSetting('segment_cache_virtual_enabled') == 'true')
 
+    if not is_virtual and is_live and ip_live_segment_cache:
+        if asset_id in service.get_uncacheable_channels():
+            xbmc.log("KyivstarPlay: channel %s is in uncacheable list, not using segment cache" % asset_id, xbmc.LOGINFO)
+            ip_live_segment_cache = False
+
     if is_virtual:
         if (is_live and use_stream_manager) or (not is_live and remove_ads) or virtual_segment_cache:
             result = service.request.local_get_elem_stream_url(service, asset_id, is_virtual, epg)
@@ -1080,6 +1085,19 @@ def show_channel(asset):
     url = plugin.url_for(update_channel, asset=channel['id'], _property='enabled')
     xbmcplugin.addDirectoryItem(handle, url, li, isFolder=False)
 
+    ip_live_segment_cache = (service.addon.getSetting('segment_cache_ip_live_enabled') == 'true')
+    if channel['enabled'] and channel['type'] == 'IP' and ip_live_segment_cache:
+        cacheable = channel['id'] not in service.get_uncacheable_channels()
+        if cacheable:
+            loc_str = service.addon.getLocalizedString(30526) # 'Segment cache enabled'
+        else:
+            loc_str = service.addon.getLocalizedString(30527) # 'Segment cache disabled'
+        icon = service.addon.getAddonInfo('path') + '/resources/images/chno.png'
+        li = xbmcgui.ListItem(label=loc_str)
+        li.setArt({'icon': icon, 'fanart': service.addon.getAddonInfo('fanart')})
+        url = plugin.url_for(update_channel, asset=channel['id'], _property='cache')
+        xbmcplugin.addDirectoryItem(handle, url, li, isFolder=False)
+
     loc_str = service.addon.getLocalizedString(30510) # 'Name'
     li = xbmcgui.ListItem(label='%s (%s)' % (loc_str, channel['name']))
     icon = service.addon.getAddonInfo('path') + '/resources/images/name.png'
@@ -1221,8 +1239,16 @@ def update_channel(asset, _property):
         if not result:
             return
         value = ';'.join(values)
+    elif _property == 'cache':
+        uncacheable_channels = service.get_uncacheable_channels()
+        if channel['id'] in uncacheable_channels:
+            uncacheable_channels.remove(channel['id'])
+        else:
+            uncacheable_channels.add(channel['id'])
+        service.save_uncacheable_channels(uncacheable_channels)
 
-    service.request.local_update_channel(asset, _property, quote(value))
+    if _property != 'cache':
+        service.request.local_update_channel(asset, _property, quote(value))
     xbmc.executebuiltin('Container.Refresh')
 
 @plugin.route('/channel_manager/move/<asset>/<position>')

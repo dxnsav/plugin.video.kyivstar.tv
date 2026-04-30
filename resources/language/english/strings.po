@@ -488,3 +488,11 @@ msgstr ""
 msgctxt "#30525"
 msgid "Input search query"
 msgstr ""
+
+msgctxt "#30526"
+msgid "Segment cache enabled"
+msgstr ""
+
+msgctxt "#30527"
+msgid "Segment cache disabled"
+msgstr ""
