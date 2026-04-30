@@ -282,25 +282,59 @@ class ChannelState():
         stream.parse(text, result.url)
         return True
 
-    def load_streams(self, stream_id, program_index, end_date):
-        start_time = self.start_time
+    def update_timeline(self, stream_id, live, start_date, end_date):
+        program_index = None
+        start_time = 0
+        if live:
+            program_index = self.program_index
+        if start_date is not None and program_index is None:
+            program_index = self.get_program_index(start_date)
+            program = self.get_program(program_index)
+            start_time = program['epg']/1000 if program else 0
+
+        start_program_index = program_index
+
+        if live:
+            if self.start_time == 0:
+                self.start_time = start_time
+            else:
+                start_time = self.start_time
         while True:
             stream = self.get_stream(stream_id, program_index)
             if stream is None:
-                break
-
+                return None
             if not self.load_stream(stream):
-                break
+                return None
 
             stream.set_start_time(start_time)
 
             if end_date is None:
                 break
 
-            if stream.is_in_bound(end_date.timestamp()):
-                break
+            if start_date is not None:
+                if self.program_index is None:
+                    self.program_index = program_index
+                elif not stream.is_in_bound(start_date.timestamp()):
+                    new_program_index = self.get_program_index(start_date)
+                    next_program_index = self.get_next_program_index(program_index)
+                    if new_program_index == program_index or new_program_index == next_program_index:
+                        program_index = next_program_index
+                        self.media_sequence += len(stream.segments)
+                        self.discontinuity_sequence += stream.get_discont_sequence() + 1
+                        self.start_time = stream.get_end_time()
+                    else:
+                        program_index = new_program_index
+                        self.media_sequence = 0
+                        self.discontinuity_sequence = 0
+                        program = self.get_program(program_index)
+                        self.start_time = program['epg']/1000 if program else 0
+                    self.program_index = program_index
+                    start_program_index = program_index
+                    start_time = self.start_time
+                    start_date = None
+                    continue
 
-            if not stream.finished:
+            if stream.is_in_bound(end_date.timestamp()) or not stream.finished:
                 break
 
             program_index = self.get_next_program_index(program_index)
@@ -308,6 +342,8 @@ class ChannelState():
                 break
 
             start_time = stream.get_end_time()
+            start_date = None
+        return start_program_index
 
     def get_next_program_index(self, program_index):
         if program_index is None:
@@ -328,9 +364,12 @@ class ChannelState():
 
         return None
 
-    def get_stream_segments(self, stream_id, program_index, start_date=None, end_date=None):
-        media_sequence = self.media_sequence
-        start_time = self.start_time
+    def get_stream_segments(self, stream_id, program_index, live, start_date, end_date):
+        media_sequence = 0
+        start_time = 0
+        if live:
+            media_sequence = self.media_sequence
+            start_time = self.start_time
         while True:
             stream = self.get_stream(stream_id, program_index)
             if stream is None:
@@ -580,15 +619,19 @@ class KyivstarStreamManager():
         elif live:
             date = date - timedelta(seconds=cache_size)
 
+        start_date = None
+        end_date = None
         if live:
-            date = date - timedelta(seconds=self.window_length)
-            program_index = channel_state.program_index
-            if program_index is None:
-                program_index = channel_state.get_program_index(date)
-                program = channel_state.get_program(program_index)
-                channel_state.start_time = program['epg']/1000 if program else 0
+            start_date = date - timedelta(seconds=self.window_length)
+            end_date = date
         else:
-            program_index = channel_state.get_program_index(date)
+            start_date = date
+
+        cache_end_date = end_date
+        if cache_enabled and cache_end_date is not None:
+            cache_end_date += timedelta(seconds=cache_size)
+
+        program_index = channel_state.update_timeline(stream_id, live, start_date, cache_end_date)
         if program_index is None and date is not None:
             return None
 
@@ -596,40 +639,11 @@ class KyivstarStreamManager():
         if stream is None:
             return None
 
-        end_date = None
-        if live:
-            end_date = date + timedelta(seconds=self.window_length)
-            if cache_enabled:
-                end_date = end_date + timedelta(seconds=cache_size)
-        channel_state.load_streams(stream_id, program_index, end_date)
-
-        if live:
-            if channel_state.program_index is None:
-                channel_state.program_index = program_index
-            elif not stream.is_in_bound(date.timestamp()):
-                new_program_index = channel_state.get_program_index(date)
-                next_program_index = channel_state.get_next_program_index(program_index)
-                if new_program_index == program_index or new_program_index == next_program_index:
-                    program_index = next_program_index
-                    channel_state.media_sequence += len(stream.segments)
-                    channel_state.discontinuity_sequence += stream.get_discont_sequence() + 1
-                    channel_state.start_time = stream.get_end_time()
-                else:
-                    program_index = new_program_index
-                    channel_state.media_sequence = 0
-                    channel_state.discontinuity_sequence = 0
-                    program = channel_state.get_program(program_index)
-                    channel_state.start_time = program['epg']/1000 if program else 0
-                channel_state.program_index = program_index
-
-                stream = channel_state.get_stream(stream_id, program_index)
-                if stream is None:
-                    return None
-                stream.set_start_time(channel_state.start_time)
-
         start_index = 0
         if live:
-            start_index = stream.get_segment_index(date.timestamp())
+            start_index = stream.get_segment_index(start_date.timestamp())
+        else:
+            start_date = None
 
         text = "#EXTM3U\n#EXT-X-VERSION:3\n"
         text += "#EXT-X-TARGETDURATION:%s\n" % stream.target_duration
@@ -641,15 +655,9 @@ class KyivstarStreamManager():
         base_url = f"http://{self.server.server_address[0]}:{self.server.server_address[1]}/segment.ts"
         base_url += f"?asset={asset_id}&stream={stream_id}{'' if epg is None else '&epg=' + str(epg)}&segment="
 
-        start_date = None
-        end_date = None
-        if live:
-            start_date = date
-            end_date = date + timedelta(seconds=self.window_length)
-
-        for segment_id, segment, start_time in channel_state.get_stream_segments(stream_id, program_index, start_date=start_date, end_date=end_date):
-            if live and start_time:
-                text += '#EXT-X-PROGRAM-DATE-TIME:%s\n' % datetime.fromtimestamp(start_time, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        for segment_id, segment, start_time in channel_state.get_stream_segments(stream_id, program_index, live, start_date, end_date):
+            #if live and start_time:
+            #    text += '#EXT-X-PROGRAM-DATE-TIME:%s\n' % datetime.fromtimestamp(start_time, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
             for tag in segment['tags']:
                 text += tag + '\n'
             if not segment["url"]:
@@ -697,7 +705,7 @@ class KyivstarStreamManager():
         if not live and not stream.is_in_bound(end_date.timestamp()):
             end_date = datetime.fromtimestamp(stream.get_end_time())
 
-        cache_list = [ (start_time, segment["url"]) for _, segment, start_time in channel_state.get_stream_segments(stream_id, program_index, start_date=start_date, end_date=end_date) if segment["url"]]
+        cache_list = [ (start_time, segment["url"]) for _, segment, start_time in channel_state.get_stream_segments(stream_id, program_index, live, start_date, end_date) if segment["url"]]
 
         self.segment_cache.update(asset_id, cache_list)
 
