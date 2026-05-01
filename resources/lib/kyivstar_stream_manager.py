@@ -399,7 +399,7 @@ class ChannelState():
             for i in range(start_index, end_index):
                 yield media_sequence + i, stream.segments[i], stream.get_segment_start_time(i)
 
-            if not stream.finished or not switch_program:
+            if not stream.finished or not switch_program or not live:
                 break
 
             program_index = self.get_next_program_index(program_index)
@@ -702,8 +702,6 @@ class KyivstarStreamManager():
         cache_size = int(self.service.addon.getSetting('segment_cache_size'))
         start_date = datetime.fromtimestamp(segment_id)
         end_date = start_date + timedelta(seconds=cache_size)
-        if not live and not stream.is_in_bound(end_date.timestamp()):
-            end_date = datetime.fromtimestamp(stream.get_end_time())
 
         cache_list = [ (start_time, segment["url"]) for _, segment, start_time in channel_state.get_stream_segments(stream_id, program_index, live, start_date, end_date) if segment["url"]]
 
