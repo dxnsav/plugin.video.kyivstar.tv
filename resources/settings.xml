@@ -360,6 +360,11 @@
                         <formatlabel>14045</formatlabel>
                     </control>
                 </setting>
+                <setting id="segment_cache_progress_overlay_enabled" type="boolean" label="30050" help="-1">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
             </group>
         </category>
         <category id="iptv_simple_client" label="30034">

@@ -533,8 +533,11 @@ class SegmentCacheManager():
                 del self.cache[key]
                 self.queue_set.discard(key)
 
-            xbmc.log("KyivstarStreamManager SegmentCacheManager.update: queue_size=%s cache_size=%s" % (len(self.queue), len(self.cache)), xbmc.LOGDEBUG)
+            queue_size = len(self.queue)
+            cache_size = len(self.cache)
+            xbmc.log("KyivstarStreamManager SegmentCacheManager.update: queue_size=%s cache_size=%s" % (queue_size, cache_size), xbmc.LOGDEBUG)
         self.queue_event.set()
+        return queue_size, cache_size
 
     def clear(self):
         with self.lock:
@@ -699,12 +702,15 @@ class KyivstarStreamManager():
         if stream is None:
             return None
 
-        cache_size = int(self.service.addon.getSetting('segment_cache_size'))
+        cache_size_setting = int(self.service.addon.getSetting('segment_cache_size'))
         start_date = datetime.fromtimestamp(segment_id)
-        end_date = start_date + timedelta(seconds=cache_size)
+        end_date = start_date + timedelta(seconds=cache_size_setting)
 
         cache_list = [ (start_time, segment["url"]) for _, segment, start_time in channel_state.get_stream_segments(stream_id, program_index, live, start_date, end_date) if segment["url"]]
 
-        self.segment_cache.update(asset_id, cache_list)
+        queue_size, cache_size = self.segment_cache.update(asset_id, cache_list)
+        if stream.target_duration > 0:
+            cache_size = max(cache_size, cache_size_setting // stream.target_duration)
+        self.service.update_cache_overlay(queue_size, cache_size)
 
         return self.segment_cache.get(asset_id, segment_id)
