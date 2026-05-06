@@ -55,6 +55,10 @@ msgctxt "#30024"
 msgid "Language:"
 msgstr ""
 
+msgctxt "#30051"
+msgid "Enable adult content"
+msgstr ""
+
 # M3U category
 msgctxt "#30008"
 msgid "M3U"
@@ -385,6 +389,14 @@ msgstr ""
 
 msgctxt "#30218"
 msgid "Channel updates: %s added, %s removed."
+msgstr ""
+
+msgctxt "#30219"
+msgid "Pin code is required to watch adult content."
+msgstr ""
+
+msgctxt "#30220"
+msgid "Adult content unlocked."
 msgstr ""
 
 # Plugin menu

@@ -12,7 +12,7 @@ from resources.lib.kyivstar_http_server import KyivstarHttpServer
 from resources.lib.channel_manager import ChannelManager
 from resources.lib.archive_manager import ArchiveManager
 from resources.lib.tasks import Task, TaskQueue, CheckSessionStatusTask, SaveM3UTask, SaveEPGTask, DailySaveEPGTask, DailySaveM3UTask
-from resources.lib.common import strip_html, SessionStatus
+from resources.lib.common import strip_html, SessionStatus, PinAction
 
 class KyivstarServiceMonitor(xbmc.Monitor):
     def __init__(self, service):
@@ -26,7 +26,8 @@ class KyivstarServiceMonitor(xbmc.Monitor):
             { 'name' : ('locale',), 'func' : self.set_locale },
             { 'name' : ('live_stream_server_port',), 'func' : self.set_server_port },
             { 'name' : ('m3u_include_kyivstar_groups',), 'func' : self.set_groups },
-            { 'name' : ('m3u_include_favorites_group',), 'func' : self.set_groups }
+            { 'name' : ('m3u_include_favorites_group',), 'func' : self.set_groups },
+            { 'name' : ('adult_content_enabled',), 'func' : self.enable_adult_content }
         ]
         self.cancel_epg_saving = None
         self.load_setting_values('_value')
@@ -115,6 +116,14 @@ class KyivstarServiceMonitor(xbmc.Monitor):
         service = self.service
         if service.m3u_path: service.add_task(SaveM3UTask(service.m3u_path))
         return True
+
+    def enable_adult_content(self, setting):
+        service = self.service
+        pin_action = setting['adult_content_enabled_new_value'] == 'true'
+        if pin_action == PinAction.RESET:
+            service.drop_channel_states = True
+        validated = service.check_pincode(pin_action=pin_action)
+        return pin_action == validated
 
     def onSettingsChanged(self):
         self.cancel_epg_saving = None
@@ -245,6 +254,28 @@ class KyivstarService:
         else:
             self.set_session_status(SessionStatus.INACTIVE)
 
+    def check_pincode(self, pin_action=PinAction.INPUT):
+        session_id = self.addon.getSetting('session_id')
+        result = None
+        if pin_action == PinAction.INPUT:
+            pincode = xbmcgui.Dialog().input('Enter pin code', type=xbmcgui.INPUT_NUMERIC)
+            if pincode == '':
+                loc_str = self.addon.getLocalizedString(30219) # 'Pin code is required to watch adult content.'
+                xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_INFO)
+                return False
+            result = self.request.validate_pincode(session_id, pincode)
+        elif pin_action == PinAction.RESET:
+            result = self.request.reset_pincode(session_id)
+        result = self.request.get_pincode_status(session_id)
+        if pin_action == PinAction.INPUT:
+            if result.value:
+                loc_str = self.addon.getLocalizedString(30220) # 'Adult content unlocked.'
+                xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_INFO)
+            else:
+                loc_str = self.addon.getLocalizedString(30219) # 'Pin code is required to watch adult content.'
+                xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_INFO)
+        return result.value
+
     def update_cache_overlay(self, queue_size, cache_size):
         if not hasattr(self, 'osd'):
             self.osd = VideoOSDWindow(VIDEO_OSD_WINDOW_ID)
@@ -315,6 +346,9 @@ class KyivstarService:
     def loop(self):
         self.check_session_status()
 
+        if self.get_session_status() != SessionStatus.EMPTY:
+            self.addon.setSetting('adult_content_enabled', str(self.check_pincode(pin_action=PinAction.SKIP)).lower())
+
         self.add_task(DailySaveEPGTask())
         self.add_task(DailySaveM3UTask())
 
@@ -326,6 +360,7 @@ class KyivstarService:
         self.abort_requested = False
         self.loop_event = threading.Event()
         self.tasks = TaskQueue()
+        self.drop_channel_states = False
 
         monitor = KyivstarServiceMonitor(self)
         self.channel_manager = ChannelManager()

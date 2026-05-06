@@ -86,6 +86,11 @@
                     </constraints>
                     <control type="list" format="string" />
                 </setting>
+                <setting id="adult_content_enabled" type="boolean" label="30051" help="-1">
+                    <level>0</level>
+                    <default>false</default>
+                    <control type="toggle" />
+                </setting>
             </group>
             <group id="group_2" label="30004">
                 <setting id="device_id" type="string" label="30005" help="-1">

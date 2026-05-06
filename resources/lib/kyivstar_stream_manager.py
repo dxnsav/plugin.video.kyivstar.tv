@@ -229,6 +229,9 @@ class ChannelState():
             result = self.service.request.get_elem_playback_stream_url(user_id, session_id, self.asset_id, date=epg)
         else:
             result = self.service.request.get_elem_stream_url(user_id, session_id, self.asset_id, virtual=self.virtual, date=epg)
+        if result.error and result.error.startswith('Pin code is required'):
+            xbmc.executebuiltin('RunPlugin(plugin://%s/check_pincode)' % self.service.addon.getAddonInfo('id'))
+            return {}
         result = self.service.request.send(result.value, ret_json=False)
         text = result.value
         url = result.url
@@ -574,6 +577,10 @@ class KyivstarStreamManager():
             date = None
         else:
             date = datetime.fromtimestamp(epg/1000)
+
+        if self.service.drop_channel_states:
+            self.service.drop_channel_states = False
+            self.channel_states.clear()
 
         if asset_id not in self.channel_states:
             self.channel_states[asset_id] = ChannelState(self.service, asset_id, virtual)

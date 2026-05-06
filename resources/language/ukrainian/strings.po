@@ -55,6 +55,10 @@ msgctxt "#30024"
 msgid "Language:"
 msgstr "Мова:"
 
+msgctxt "#30051"
+msgid "Enable adult content"
+msgstr "Увімкнути контент для дорослих"
+
 # M3U category
 msgctxt "#30008"
 msgid "M3U"
@@ -386,6 +390,14 @@ msgstr "Ви увійшли як {}"
 msgctxt "#30218"
 msgid "Channel updates: %s added, %s removed."
 msgstr "Оновлення каналів: %s додано, %s видалено."
+
+msgctxt "#30219"
+msgid "Pin code is required to watch adult content."
+msgstr "Для перегляду контенту для дорослих потрібен пінкод."
+
+msgctxt "#30220"
+msgid "Adult content unlocked."
+msgstr "Контент для дорослих розблоковано."
 
 # Plugin menu
 

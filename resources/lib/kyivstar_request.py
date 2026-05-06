@@ -27,15 +27,17 @@ class KyivstarRequest:
     def set_base_local_url_port(self, port):
         self.base_local_url = "http://127.0.0.1:%s/{}" % port
 
-    def send(self, url, data=None, json=None, ret=True, ret_json=True, ret_binary=False, cookies=None):
+    def send(self, url, data=None, json=None, put=False, ret=True, ret_json=True, ret_binary=False, cookies=None):
         result = RequestResult(url)
         try:
             if data is None and json is None:
                 response = self.session.get(url, headers=self.headers, cookies=cookies)
             elif data is not None:
-                response = self.session.post(url, data=data, headers=self.headers, cookies=cookies)
+                method = self.session.put if put else self.session.post
+                response = method(url, data=data, headers=self.headers, cookies=cookies)
             elif json is not None:
-                response = self.session.post(url, json=json, headers=self.headers, cookies=cookies)
+                method = self.session.put if put else self.session.post
+                response = method(url, json=json, headers=self.headers, cookies=cookies)
             if ret:
                 if response.status_code == 200:
                     result.value = response.content if ret_binary else (response.json() if ret_json else response.text)
@@ -433,4 +435,34 @@ class KyivstarRequest:
         if epg:
             url += ('&epg=%s' % epg)
         result.value = url
+        return result
+
+    def get_pincode_status(self, session_id):
+        url = self.base_api_url.format('api/v1/subscribers/pincode/status;jsessionid=%s' % session_id)
+        result = self.send(url)
+        if result.error:
+            xbmc.log("KyivstarRequest exception in get_pincode_status: " + result.error, xbmc.LOGERROR)
+            result.value = False
+        else:
+            result.value = result.value.get('validated', False)
+        return result
+
+    def validate_pincode(self, session_id, pincode):
+        url = self.base_api_url.format('api/v1/subscribers/pincode;jsessionid=%s?pin=%s' % (session_id, pincode))
+        result = self.send(url, ret_json=False)
+        if result.error:
+            xbmc.log("KyivstarRequest exception in validate_pincode: " + result.error, xbmc.LOGERROR)
+            result.value = False
+        else:
+            result.value = True
+        return result
+
+    def reset_pincode(self, session_id):
+        url = self.base_api_url.format('api/v1/subscribers/pincode/reset;jsessionid=%s' % session_id)
+        result = self.send(url, data={}, put=True, ret_json=False)
+        if result.error:
+            xbmc.log("KyivstarRequest exception in reset_pincode: " + result.error, xbmc.LOGERROR)
+            result.value = False
+        else:
+            result.value = True
         return result
