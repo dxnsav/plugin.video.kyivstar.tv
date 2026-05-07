@@ -69,7 +69,7 @@ class Stream():
                 segment_tags = []
                 segment_offset += segment_duration
 
-    def get_discont_sequence(self, segment_index=None):
+    def get_discont_sequence(self, live, segment_index=None):
         if len(self.segments) == 0:
             return 0
 
@@ -77,8 +77,10 @@ class Stream():
             segment_index = len(self.segments)
 
         discont_count = 0
+        if live and segment_index > 0:
+            discont_count += 1
         for discont_index in self.discont_indexes:
-            if segment_index < discont_index:
+            if segment_index <= discont_index:
                 break
             discont_count += 1
 
@@ -323,7 +325,7 @@ class ChannelState():
                     if new_program_index == program_index or new_program_index == next_program_index:
                         program_index = next_program_index
                         self.media_sequence += len(stream.segments)
-                        self.discontinuity_sequence += stream.get_discont_sequence() + 1
+                        self.discontinuity_sequence += stream.get_discont_sequence(live)
                         self.start_time = stream.get_end_time()
                     else:
                         program_index = new_program_index
@@ -399,6 +401,9 @@ class ChannelState():
                 else:
                     switch_program = True
 
+            if live and start_index == 0 and end_index > 0:
+                yield -1, { "url" : None, "tags" : [ '#EXT-X-DISCONTINUITY' ] }, None
+
             for i in range(start_index, end_index):
                 yield media_sequence + i, stream.segments[i], stream.get_segment_start_time(i)
 
@@ -408,8 +413,6 @@ class ChannelState():
             program_index = self.get_next_program_index(program_index)
             if program_index is None:
                 break
-
-            yield -1, { "url" : None, "tags" : [ '#EXT-X-DISCONTINUITY' ] }, None
 
             start_date = None
             media_sequence += len(stream.segments)
@@ -659,7 +662,7 @@ class KyivstarStreamManager():
         text += "#EXT-X-TARGETDURATION:%s\n" % stream.target_duration
         media_sequence = channel_state.media_sequence + start_index
         text += "#EXT-X-MEDIA-SEQUENCE:%s\n" % media_sequence
-        discontinuity_sequence = channel_state.discontinuity_sequence + stream.get_discont_sequence(start_index)
+        discontinuity_sequence = channel_state.discontinuity_sequence + stream.get_discont_sequence(live, start_index)
         text += "#EXT-X-DISCONTINUITY-SEQUENCE:%s\n\n" % discontinuity_sequence
 
         base_url = f"http://{self.server.server_address[0]}:{self.server.server_address[1]}/segment.ts"
