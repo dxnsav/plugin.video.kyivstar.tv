@@ -720,7 +720,10 @@ class KyivstarStreamManager():
 
         queue_size, cache_size = self.segment_cache.update(asset_id, cache_list)
         if stream.target_duration > 0:
-            cache_size = max(cache_size, cache_size_setting // stream.target_duration)
+            calc_cache_size = cache_size_setting // stream.target_duration
+            if calc_cache_size > cache_size:
+                queue_size += calc_cache_size - cache_size
+                cache_size = calc_cache_size
         self.service.update_cache_overlay(queue_size, cache_size)
 
         return self.segment_cache.get(asset_id, segment_id)
