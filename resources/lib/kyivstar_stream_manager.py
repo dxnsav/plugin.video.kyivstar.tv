@@ -274,19 +274,6 @@ class ChannelState():
 
         return streams[stream_id]
 
-    def load_stream(self, stream):
-        if stream.finished:
-            return True
-        result = self.service.request.send(stream.url, ret_json=False)
-        text = result.value
-        if result.error or text is None:
-            if result.recoverable:
-                return True
-            xbmc.log("KyivstarStreamManager get_stream: %s" % result.error, xbmc.LOGERROR)
-            return False
-        stream.parse(text, result.url)
-        return True
-
     def update_timeline(self, stream_id, live, start_date, end_date):
         program_index = None
         start_time = 0
@@ -308,8 +295,17 @@ class ChannelState():
             stream = self.get_stream(stream_id, program_index)
             if stream is None:
                 return None
-            if not self.load_stream(stream):
-                return None
+
+            if not stream.finished:
+                result = self.service.request.send(stream.url, ret_json=False)
+                if result.error:
+                    if not result.recoverable:
+                        if result.error.startswith('403'):
+                            del self.streams[program_index]
+                        xbmc.log("KyivstarStreamManager update_timeline: %s" % result.error, xbmc.LOGERROR)
+                        return None
+                else:
+                    stream.parse(result.value, result.url)
 
             stream.set_start_time(start_time)
 
