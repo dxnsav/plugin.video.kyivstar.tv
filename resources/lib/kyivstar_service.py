@@ -133,60 +133,67 @@ class KyivstarServiceMonitor(xbmc.Monitor):
             self.check_setting(setting)
 
     def onNotification(self, sender, method, data):
-        if method == 'Player.OnStop' and hasattr(self.service, 'osd'):
-            self.service.osd.hide_cache_progressbar()
+        if method == 'Player.OnStop':
+            if hasattr(self, 'osd'): self.osd.enabled = False
 
-VIDEO_OSD_WINDOW_ID = 12901
+class VideoOSDWindow:
+    VIDEO_OSD_WINDOW_ID = 12901
 
-class VideoOSDWindow(xbmcgui.Window):
-    def set_service(self, service):
+    def __init__(self, service):
         self.service = service
-        self.progress_value = None
+        self.enabled = False
+        self.visible = False
+        self.progress_value = 0
+        self.window = xbmcgui.Window(self.VIDEO_OSD_WINDOW_ID)
 
-    def add_cache_progressbar(self):
-        if hasattr(self, "cache_progressbar"):
-            return
         addon_path = xbmcvfs.translatePath(self.service.addon.getAddonInfo('path'))
         images_path = os.path.join(addon_path, 'resources/images')
-        self.cache_progressbar = xbmcgui.ControlProgress(
+        self.back = xbmcgui.ControlImage(
             x=0,
             y=0,
-            width=self.getWidth(),
+            width=self.window.getWidth(),
             height=8,
-            texturebg=os.path.join(images_path, 'texturebg-progress.png'),
-            texturemid=os.path.join(images_path, 'texturemid-progress.png'))
-        self.addControl(self.cache_progressbar)
-        self.cache_progressbar.setVisible(True)
-        self.cache_progressbar.setVisible(False)
+            filename=os.path.join(images_path, 'texturebg-progress.png')
+        )
+        self.front = xbmcgui.ControlImage(
+            x=0,
+            y=0,
+            width=self.window.getWidth(),
+            height=8,
+            filename=os.path.join(images_path, 'texturemid-progress.png')
+        )
+        self.animations = [
+            #("WindowOpen", "effect=fade start=0 end=100 time=300",),
+            ("WindowOpen", "effect=slide start=0,200 end=0,0 time=300 tween=cubic easing=out",),
+            #("WindowClose", "effect=fade start=100 end=0 time=300",),
+            ("WindowClose", "effect=slide start=0,0 end=0,200 time=300 tween=cubic easing=out",)
+        ]
+        self.back.setAnimations(self.animations)
+        self.front.setAnimations(self.animations)
 
-    def hide_cache_progressbar(self):
-        if not hasattr(self, "cache_progressbar"):
-            return
-        self.cache_progressbar.setVisible(False)
+    def hide(self):
+        self.window.removeControl(self.back)
+        self.window.removeControl(self.front)
+        self.visible = False
 
-    def show_cache_progressbar(self):
-        if not hasattr(self, "cache_progressbar"):
-            return
-        self.cache_progressbar.setVisible(True)
+    def _update_control(self, control, percent):
+        control.setPosition(0, self.window.getHeight() - 100)
+        control.setWidth(int(self.window.getWidth() * percent / 100))
+        control.setAnimations(self.animations)
 
-    def remove_cache_progressbar(self):
-        if not hasattr(self, "cache_progressbar"):
-            return
-        self.removeControl(self.cache_progressbar)
-        del self.cache_progressbar
+    def show(self):
+        self.window.addControl(self.back)
+        self.window.addControl(self.front)
+        self._update_control(self.back, 100)
+        self._update_control(self.front, self.progress_value)
+        self.visible = True
 
-    def set_progress_value(self, progress_value):
+    def can_show(self):
+        return self.enabled and self.service.addon.getSetting('segment_cache_progress_overlay_enabled') == 'true'
+
+    def update(self, progress_value):
         self.progress_value = progress_value
-        if not hasattr(self, "cache_progressbar"):
-            return
-        self.cache_progressbar.setPercent(self.progress_value)
-
-    def update_cache_progressbar(self):
-        if not hasattr(self, "cache_progressbar"):
-            return
-        self.cache_progressbar.setPercent(self.progress_value)
-        self.cache_progressbar.setPosition(0, self.getHeight() - 100)
-        self.cache_progressbar.setWidth(self.getWidth())
+        self._update_control(self.front, self.progress_value)
 
 class KyivstarService:
     def __init__(self):
@@ -277,14 +284,10 @@ class KyivstarService:
         return result.value
 
     def update_cache_overlay(self, queue_size, cache_size):
-        if not hasattr(self, 'osd'):
-            self.osd = VideoOSDWindow(VIDEO_OSD_WINDOW_ID)
-            self.osd.set_service(self)
-            self.osd.add_cache_progressbar()
-        if self.addon.getSetting('segment_cache_progress_overlay_enabled') == 'true':
-            self.osd.show_cache_progressbar()
         cache_level = min(100, (100 * max(0, cache_size - queue_size) / cache_size)) if cache_size > 0 else 0
-        self.osd.set_progress_value(cache_level)
+        if hasattr(self, 'osd'):
+            self.osd.update(cache_level)
+            self.osd.enabled = True
 
     def get_enabled_channels(self):
         if self.get_session_status() == SessionStatus.EMPTY:
@@ -378,9 +381,13 @@ class KyivstarService:
         loop_thread = threading.Thread(target=self.loop)
         loop_thread.start()
 
+        self.osd = VideoOSDWindow(self)
         while not monitor.abortRequested():
-            if xbmc.getCondVisibility('Window.IsVisible(videoosd)') and hasattr(self, 'osd'):
-                self.osd.update_cache_progressbar()
+            video_osd_visible = xbmc.getCondVisibility('Window.IsVisible(videoosd)')
+            if video_osd_visible and not self.osd.visible and self.osd.can_show():
+                self.osd.show()
+            elif not video_osd_visible and self.osd.visible:
+                self.osd.hide()
             monitor.waitForAbort(0.25)
 
         self.abort_requested = True
