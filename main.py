@@ -402,7 +402,7 @@ def play(videoid):
     url = result.value
     if result.error:
         if result.error.startswith('Pin code is required'):
-            check_pincode()
+            service.addon.setSetting('adult_content_enabled', 'true')
             return
         loc_str = service.addon.getLocalizedString(30216) # 'Error getting stream url. Check your logs for details.'
         xbmcgui.Dialog().notification('Kyivstar.tv', loc_str, xbmcgui.NOTIFICATION_ERROR)
@@ -458,10 +458,6 @@ def play_archive(program_asset_id):
         return
 
     return play(videoid)
-
-@plugin.route('/check_pincode')
-def check_pincode():
-    service.check_pincode()
 
 @plugin.route('')
 def root():

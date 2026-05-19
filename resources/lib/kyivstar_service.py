@@ -346,8 +346,9 @@ class KyivstarService:
     def loop(self):
         self.check_session_status()
 
-        if self.get_session_status() != SessionStatus.EMPTY:
-            self.addon.setSetting('adult_content_enabled', str(self.check_pincode(pin_action=PinAction.SKIP)).lower())
+        if self.get_session_status() != SessionStatus.EMPTY and self.addon.getSetting('adult_content_enabled') == 'true':
+            if not self.check_pincode(pin_action=PinAction.SKIP):
+                self.addon.setSetting('adult_content_enabled', 'false')
 
         self.add_task(DailySaveEPGTask())
         self.add_task(DailySaveM3UTask())

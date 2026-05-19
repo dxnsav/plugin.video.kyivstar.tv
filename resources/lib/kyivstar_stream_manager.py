@@ -232,7 +232,7 @@ class ChannelState():
         else:
             result = self.service.request.get_elem_stream_url(user_id, session_id, self.asset_id, virtual=self.virtual, date=epg)
         if result.error and result.error.startswith('Pin code is required'):
-            xbmc.executebuiltin('RunPlugin(plugin://%s/check_pincode)' % self.service.addon.getAddonInfo('id'))
+            self.service.addon.setSetting('adult_content_enabled', 'true')
             return {}
         result = self.service.request.send(result.value, ret_json=False)
         text = result.value
