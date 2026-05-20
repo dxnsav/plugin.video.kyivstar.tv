@@ -134,7 +134,7 @@ class KyivstarServiceMonitor(xbmc.Monitor):
 
     def onNotification(self, sender, method, data):
         if method == 'Player.OnStop':
-            if hasattr(self, 'osd'): self.osd.enabled = False
+            if hasattr(self.service, 'osd'): self.service.osd.enabled = False
 
 class VideoOSDWindow:
     VIDEO_OSD_WINDOW_ID = 12901
