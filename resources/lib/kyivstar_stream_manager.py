@@ -695,8 +695,11 @@ class KyivstarStreamManager():
             start_date = date
 
         cache_end_date = end_date
-        if cache_enabled and cache_end_date is not None:
-            cache_end_date += timedelta(seconds=cache_size)
+        if cache_end_date is not None:
+            if cache_enabled:
+                cache_end_date += timedelta(seconds=cache_size)
+            else:
+                cache_end_date += timedelta(seconds=60)
 
         program_index = channel_state.update_timeline(stream_id, live, start_date, cache_end_date)
         if program_index is None and date is not None:
