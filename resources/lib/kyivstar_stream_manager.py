@@ -625,6 +625,9 @@ class KyivstarStreamManager():
                 del self.channel_states[asset_id]
         xbmc.log("KyivstarStreamManager check_active_states: active=%s outdated=%s" % (len(self.channel_states), len(outdated_states)), xbmc.LOGDEBUG)
 
+    def stop(self):
+        self.segment_cache.stop()
+
     def get_playlist_content(self, asset_id, virtual, epg):
         if epg is None:
             date = datetime.now()

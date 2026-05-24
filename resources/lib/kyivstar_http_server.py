@@ -267,7 +267,7 @@ class KyivstarHttpServer(object):
         self.httpd.shutdown()
         self.httpd.server_close()
         self.server_thread.join()
-        self.httpd.stream_manager.segment_cache.stop()
+        self.httpd.stream_manager.stop()
 
         self.httpd = None
         self.server_thread = None
