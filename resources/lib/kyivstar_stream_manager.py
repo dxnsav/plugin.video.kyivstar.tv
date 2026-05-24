@@ -400,6 +400,8 @@ class ChannelState():
                 else:
                     start_time = self.start_time
 
+        retried_programs = set()
+
         while True:
             stream = self.get_stream(stream_id, program_index)
             if stream is None:
@@ -415,7 +417,11 @@ class ChannelState():
                         stream.set_last_update(now)
                     elif not result.recoverable:
                         if result.error.startswith('403'):
+                            xbmc.log("KyivstarStreamManager update_timeline: 403 Forbidden for cached stream %s. Cleared cache." % str(program_index), xbmc.LOGWARNING)
                             del self.streams[program_index]
+                            if program_index not in retried_programs:
+                                retried_programs.add(program_index)
+                                continue
                         xbmc.log("KyivstarStreamManager update_timeline: %s" % result.error, xbmc.LOGERROR)
                         return None
                 else:
