@@ -21,33 +21,43 @@ class Stream():
         self.bandwidth = bandwidth
         self.resolution = resolution
         self.start_time = 0.0
+
+        self.lock = threading.RLock()
+
         self.reset()
 
     def reset(self):
-        self.finished = False
-        self.segments = []
-        self.segments_start = []
-        self.segments_end = []
-        self.discont_indexes = []
-        self.target_duration = 0
+        with self.lock:
+            self.finished = False
+            self.segments = []
+            self.segments_start = []
+            self.segments_end = []
+            self.discont_indexes = []
+            self.target_duration = 0
 
     def parse(self, text, base_url):
         lines = text.splitlines()
 
-        self.reset()
+        finished = False
+        segments = []
+        segments_start = []
+        segments_end = []
+        discont_indexes = []
+        target_duration = 0
+
         segment_tags = []
         segment_duration = 0.0
         segment_offset = 0.0
         segment_discontinuity = False
         for line in lines:
             if line.startswith('#EXT-X-TARGETDURATION:'):
-                self.target_duration = int(line[22:])
+                target_duration = int(line[22:])
             elif line == '#EXT-X-DISCONTINUITY':
                 segment_tags.append(line)
                 segment_discontinuity = True
                 pass
             elif line == '#EXT-X-ENDLIST':
-                self.finished = True
+                finished = True
             elif line.startswith('https://adroll.production.vidmind.com'):
                 segment_tags = []
                 segment_discontinuity = False
@@ -58,66 +68,90 @@ class Stream():
                 if not line.startswith('https://'):
                     line = urljoin(base_url, line)
                 if segment_discontinuity:
-                    self.discont_indexes.append(len(self.segments))
+                    discont_indexes.append(len(segments))
                     segment_discontinuity = False
-                self.segments.append({
+                segments.append({
                     'url' : line,
                     'tags' : segment_tags,
                 })
-                self.segments_start.append(segment_offset)
-                self.segments_end.append(segment_offset + segment_duration)
+                segments_start.append(segment_offset)
+                segments_end.append(segment_offset + segment_duration)
                 segment_tags = []
                 segment_offset += segment_duration
 
+        with self.lock:
+            self.finished = finished
+            self.segments = segments
+            self.segments_start = segments_start
+            self.segments_end = segments_end
+            self.discont_indexes = discont_indexes
+            self.target_duration = target_duration
+
     def get_discont_sequence(self, live, segment_index=None):
-        if len(self.segments) == 0:
-            return 0
+        with self.lock:
+            if len(self.segments) == 0:
+                return 0
 
-        if segment_index is None:
-            segment_index = len(self.segments)
+            if segment_index is None:
+                segment_index = len(self.segments)
 
-        discont_count = 0
-        if live and segment_index > 0:
-            discont_count += 1
-        for discont_index in self.discont_indexes:
-            if segment_index <= discont_index:
-                break
-            discont_count += 1
+            discont_count = 0
+            if live and segment_index > 0:
+                discont_count += 1
+            for discont_index in self.discont_indexes:
+                if segment_index <= discont_index:
+                    break
+                discont_count += 1
 
-        return discont_count
+            return discont_count
 
     def set_start_time(self, cur_time):
-        self.start_time = cur_time
+        with self.lock:
+            self.start_time = cur_time
 
     def get_segment_start_time(self, index):
-        count = len(self.segments)
-        if not (-count <= index < count):
-            xbmc.log("KyivstarStreamManager Stream.get_segment_start_time: the index %s is out of range for the segments list with the length %s" % (index, count), xbmc.LOGERROR)
-            return 0.0
-        return self.segments_start[index] + self.start_time
+        with self.lock:
+            count = len(self.segments)
+            if not (-count <= index < count):
+                xbmc.log("KyivstarStreamManager Stream.get_segment_start_time: the index %s is out of range for the segments list with the length %s" % (index, count), xbmc.LOGERROR)
+                return 0.0
+            return self.segments_start[index] + self.start_time
 
     def get_segment_end_time(self, index):
-        count = len(self.segments)
-        if not (-count <= index < count):
-            xbmc.log("KyivstarStreamManager Stream.get_segment_end_time: the index %s is out of range for the segments list with the length %s" % (index, count), xbmc.LOGERROR)
-            return 0.0
-        return self.segments_end[index] + self.start_time
+        with self.lock:
+            count = len(self.segments)
+            if not (-count <= index < count):
+                xbmc.log("KyivstarStreamManager Stream.get_segment_end_time: the index %s is out of range for the segments list with the length %s" % (index, count), xbmc.LOGERROR)
+                return 0.0
+            return self.segments_end[index] + self.start_time
 
     def get_start_time(self):
-        return self.get_segment_start_time(0)
+        with self.lock:
+            if len(self.segments) == 0:
+                return self.start_time
+            return self.segments_start[0] + self.start_time
 
     def get_end_time(self):
-        return self.get_segment_end_time(-1)
+        with self.lock:
+            if len(self.segments) == 0:
+                return self.start_time
+            return self.segments_end[-1] + self.start_time
 
     def is_in_bound(self, cur_time):
-        return self.get_start_time() <= cur_time < self.get_end_time()
+        with self.lock:
+            if len(self.segments) == 0:
+                return False
+            start_time = self.segments_start[0] + self.start_time
+            end_time = self.segments_end[-1] + self.start_time
+            return start_time <= cur_time < end_time
 
     def get_segment_index(self, cur_time):
-        if len(self.segments) == 0:
-            return 0
-        cur_time -= self.start_time
-        index = bisect.bisect(self.segments_start, cur_time) - 1
-        return max(0, min(index, len(self.segments) - 1))
+        with self.lock:
+            if len(self.segments) == 0:
+                return 0
+            cur_time -= self.start_time
+            index = bisect.bisect(self.segments_start, cur_time) - 1
+            return max(0, min(index, len(self.segments) - 1))
 
 class ChannelState():
     def __init__(self, service, asset_id, virtual):
@@ -139,34 +173,49 @@ class ChannelState():
         self.stream_ids = {}
         self.free_stream_id = 0
 
+        self.lock = threading.RLock()
+
     def get_stream_id(self, stream):
         stream_info = (stream.resolution, stream.bandwidth)
-        stream_id = self.stream_infos.get(stream_info)
-        if stream_id is not None:
+        with self.lock:
+            stream_id = self.stream_infos.get(stream_info)
+            if stream_id is not None:
+                return stream_id
+
+            stream_id = self.free_stream_id
+            self.free_stream_id += 1
+            self.stream_infos[stream_info] = stream_id
+            self.stream_ids[stream_id] = {
+                'resolution': stream_info[0],
+                'bandwidth': stream_info[1],
+                'alternates': []
+            }
+
+            for i in self.stream_ids:
+                self.stream_ids[i]['alternates'] = []
+                for j in self.stream_ids:
+                    if j == i or j in self.stream_ids[i]['alternates']:
+                        continue
+                    if self.stream_ids[i]['resolution'] != self.stream_ids[j]['resolution']:
+                        continue
+                    self.stream_ids[i]['alternates'].append(j)
+                for j in self.stream_ids:
+                    if j == i or j in self.stream_ids[i]['alternates']:
+                        continue
+                    if self.stream_ids[i]['bandwidth'] != self.stream_ids[j]['bandwidth']:
+                        continue
+                    self.stream_ids[i]['alternates'].append(j)
+                for j in self.stream_ids:
+                    if j == i or j in self.stream_ids[i]['alternates']:
+                        continue
+                    self.stream_ids[i]['alternates'].append(j)
+
             return stream_id
 
-        self.stream_infos[stream_info] = self.free_stream_id
-        self.stream_ids[self.free_stream_id] = { 'resolution' : stream_info[0], 'bandwidth' : stream_info[1], 'alternates' : [] }
-        self.free_stream_id += 1
-
-        for i in self.stream_ids:
-            self.stream_ids[i]['alternates'] = []
-            for j in self.stream_ids:
-                if j == i or j in self.stream_ids[i]['alternates']: continue
-                if self.stream_ids[i]['resolution'] != self.stream_ids[j]['resolution']: continue
-                self.stream_ids[i]['alternates'].append(j)
-            for j in self.stream_ids:
-                if j == i or j in self.stream_ids[i]['alternates']: continue
-                if self.stream_ids[i]['bandwidth'] != self.stream_ids[j]['bandwidth']: continue
-                self.stream_ids[i]['alternates'].append(j)
-            for j in self.stream_ids:
-                if j == i or j in self.stream_ids[i]['alternates']: continue
-                self.stream_ids[i]['alternates'].append(j)
-        return self.stream_infos[stream_info]
-
     def get_program_list(self, date_index):
-        if date_index in self.program_list:
-            return self.program_list[date_index]
+        with self.lock:
+            if date_index in self.program_list:
+                return self.program_list[date_index]
 
         session_id = self.service.addon.getSetting('session_id')
         result = self.service.request.get_elem_epg_data(session_id, self.asset_id, date=date_index, days_before=0, days_after=0)
@@ -182,8 +231,9 @@ class ChannelState():
                 'start' : datetime.fromtimestamp(program['start']/1000),
                 'end' : datetime.fromtimestamp(program['finish']/1000),
             })
-        self.program_list[date_index] = program_list
-        return self.program_list[date_index]
+        with self.lock:
+            self.program_list[date_index] = program_list
+        return program_list
 
     def get_program_index(self, date):
         if date is None:
@@ -220,8 +270,9 @@ class ChannelState():
         return program_list[index]
 
     def get_streams(self, program_index, force=False):
-        if program_index in self.streams and not force:
-            return self.streams[program_index]
+        with self.lock:
+            if program_index in self.streams and not force:
+                return self.streams[program_index]
 
         program = self.get_program(program_index)
         epg = program['epg'] if program else None
@@ -253,7 +304,8 @@ class ChannelState():
                 stream = Stream(line, url, stream_inf=stream_inf)
                 stream_id = self.get_stream_id(stream)
                 streams[stream_id] = stream
-        self.streams[program_index] = streams
+        with self.lock:
+            self.streams[program_index] = streams
         return streams
 
     def get_stream(self, stream_id, program_index):
@@ -275,10 +327,10 @@ class ChannelState():
         return streams[stream_id]
 
     def update_timeline(self, stream_id, live, start_date, end_date):
-        program_index = None
-        start_time = 0
-        if live:
-            program_index = self.program_index
+        with self.lock:
+            program_index = self.program_index if live else None
+            start_time = self.start_time if live else 0
+
         if start_date is not None and program_index is None:
             program_index = self.get_program_index(start_date)
             program = self.get_program(program_index)
@@ -287,10 +339,12 @@ class ChannelState():
         start_program_index = program_index
 
         if live:
-            if self.start_time == 0:
-                self.start_time = start_time
-            else:
-                start_time = self.start_time
+            with self.lock:
+                if self.start_time == 0:
+                    self.start_time = start_time
+                else:
+                    start_time = self.start_time
+
         while True:
             stream = self.get_stream(stream_id, program_index)
             if stream is None:
@@ -313,27 +367,28 @@ class ChannelState():
                 break
 
             if start_date is not None:
-                if self.program_index is None:
-                    self.program_index = program_index
-                elif not stream.is_in_bound(start_date.timestamp()):
-                    new_program_index = self.get_program_index(start_date)
-                    next_program_index = self.get_next_program_index(program_index)
-                    if new_program_index == program_index or new_program_index == next_program_index:
-                        program_index = next_program_index
-                        self.media_sequence += len(stream.segments)
-                        self.discontinuity_sequence += stream.get_discont_sequence(live)
-                        self.start_time = stream.get_end_time()
-                    else:
-                        program_index = new_program_index
-                        self.media_sequence = 0
-                        self.discontinuity_sequence = 0
-                        program = self.get_program(program_index)
-                        self.start_time = program['epg']/1000 if program else 0
-                    self.program_index = program_index
-                    start_program_index = program_index
-                    start_time = self.start_time
-                    start_date = None
-                    continue
+                with self.lock:
+                    if self.program_index is None:
+                        self.program_index = program_index
+                    elif not stream.is_in_bound(start_date.timestamp()):
+                        new_program_index = self.get_program_index(start_date)
+                        next_program_index = self.get_next_program_index(program_index)
+                        if new_program_index == program_index or new_program_index == next_program_index:
+                            program_index = next_program_index
+                            self.media_sequence += len(stream.segments)
+                            self.discontinuity_sequence += stream.get_discont_sequence(live)
+                            self.start_time = stream.get_end_time()
+                        else:
+                            program_index = new_program_index
+                            self.media_sequence = 0
+                            self.discontinuity_sequence = 0
+                            program = self.get_program(program_index)
+                            self.start_time = program['epg']/1000 if program else 0
+                        self.program_index = program_index
+                        start_program_index = program_index
+                        start_time = self.start_time
+                        start_date = None
+                        continue
 
             if stream.is_in_bound(end_date.timestamp()) or not stream.finished:
                 break
@@ -366,11 +421,10 @@ class ChannelState():
         return None
 
     def get_stream_segments(self, stream_id, program_index, live, start_date, end_date):
-        media_sequence = 0
-        start_time = 0
-        if live:
-            media_sequence = self.media_sequence
-            start_time = self.start_time
+        with self.lock:
+            media_sequence = self.media_sequence if live else 0
+            start_time = self.start_time if live else 0
+
         while True:
             stream = self.get_stream(stream_id, program_index)
             if stream is None:
@@ -423,12 +477,12 @@ class SegmentCacheManager():
         self.process_thread = None
         self.process_key = None
         self.queue_event = threading.Event()
+        self.abort_event = threading.Event()
         self.lock = threading.Lock()
-        self.abort_requested = False
 
     def process(self):
         wait_time = None
-        while not self.abort_requested:
+        while not self.abort_event.is_set():
             self.queue_event.wait(timeout=wait_time)
             self.queue_event.clear()
 
@@ -471,14 +525,14 @@ class SegmentCacheManager():
     def start(self):
         if self.process_thread is not None:
             return
-        self.abort_requested = False
+        self.abort_event.clear()
         self.process_thread = threading.Thread(target=self.process)
         self.process_thread.start()
 
     def stop(self):
         if self.process_thread is None:
             return
-        self.abort_requested = True
+        self.abort_event.set()
         self.queue_event.set()
         self.process_thread.join()
         self.process_thread = None
@@ -556,17 +610,19 @@ class KyivstarStreamManager():
         self.window_length = 60
         self.segment_cache = SegmentCacheManager(self.service)
         self.segment_cache.start()
+        self.lock = threading.RLock()
 
     def check_active_states(self):
         outdated_states = []
         time_limit = datetime.now() - timedelta(minutes=30)
-        for asset_id in self.channel_states:
-            channel_state = self.channel_states[asset_id]
-            if channel_state.last_access_time < time_limit:
-                outdated_states.append(asset_id)
+        with self.lock:
+            for asset_id in self.channel_states:
+                channel_state = self.channel_states[asset_id]
+                if channel_state.last_access_time < time_limit:
+                    outdated_states.append(asset_id)
 
-        for asset_id in outdated_states:
-            del self.channel_states[asset_id]
+            for asset_id in outdated_states:
+                del self.channel_states[asset_id]
         xbmc.log("KyivstarStreamManager check_active_states: active=%s outdated=%s" % (len(self.channel_states), len(outdated_states)), xbmc.LOGDEBUG)
 
     def get_playlist_content(self, asset_id, virtual, epg):
@@ -577,13 +633,14 @@ class KyivstarStreamManager():
         else:
             date = datetime.fromtimestamp(epg/1000)
 
-        if self.service.drop_channel_states:
-            self.service.drop_channel_states = False
-            self.channel_states.clear()
+        with self.lock:
+            if self.service.drop_channel_states:
+                self.service.drop_channel_states = False
+                self.channel_states.clear()
 
-        if asset_id not in self.channel_states:
-            self.channel_states[asset_id] = ChannelState(self.service, asset_id, virtual)
-        channel_state = self.channel_states[asset_id]
+            if asset_id not in self.channel_states:
+                self.channel_states[asset_id] = ChannelState(self.service, asset_id, virtual)
+            channel_state = self.channel_states[asset_id]
         channel_state.last_access_time = datetime.now()
         self.check_active_states()
 
@@ -615,7 +672,8 @@ class KyivstarStreamManager():
         else:
             date = datetime.fromtimestamp(epg/1000)
 
-        channel_state = self.channel_states.get(asset_id)
+        with self.lock:
+            channel_state = self.channel_states.get(asset_id)
         if channel_state is None:
             xbmc.log("KyivstarStreamManager get_chunklist_content: the asset %s has no channel state" % asset_id, xbmc.LOGERROR)
             return None
@@ -691,7 +749,8 @@ class KyivstarStreamManager():
         else:
             date = datetime.fromtimestamp(epg/1000)
 
-        channel_state = self.channel_states.get(asset_id)
+        with self.lock:
+            channel_state = self.channel_states.get(asset_id)
         if channel_state is None:
             xbmc.log("KyivstarStreamManager get_segment_content: the asset %s has no channel state" % asset_id, xbmc.LOGERROR)
             return None
