@@ -1,5 +1,7 @@
 import bisect
+import queue
 import threading
+import time
 
 import xbmc
 
@@ -23,8 +25,15 @@ class Stream():
         self.start_time = 0.0
 
         self.lock = threading.RLock()
+        self.last_update = 0.0
 
         self.reset()
+
+    def get_last_update(self):
+        return self.last_update
+
+    def set_last_update(self, cur_time):
+        self.last_update = cur_time
 
     def reset(self):
         with self.lock:
@@ -174,6 +183,52 @@ class ChannelState():
         self.free_stream_id = 0
 
         self.lock = threading.RLock()
+        self.update_queue = queue.Queue()
+        self.pending_updates = set()
+
+        self.worker_thread = threading.Thread(target=self._update_worker)
+        self.worker_thread.start()
+
+    def _update_worker(self):
+        while True:
+            task = self.update_queue.get()
+
+            if task is None:
+                self.update_queue.task_done()
+                break
+
+            if isinstance(task, Stream):
+                stream = task
+                try:
+                    result = self.service.request.send(stream.url, ret_json=False)
+                    if not result.error:
+                        stream.parse(result.value, result.url)
+                        stream.set_last_update(time.time())
+                    else:
+                        xbmc.log("KyivstarStreamManager _update_worker: error for asset %s: %s" % (self.asset_id, result.error), xbmc.LOGERROR)
+                except Exception as e:
+                    xbmc.log("KyivstarStreamManager _update_worker: stream update exception: %s" % str(e), xbmc.LOGERROR)
+                finally:
+                    with self.lock:
+                        self.pending_updates.discard(stream.url)
+                    self.update_queue.task_done()
+
+            elif isinstance(task, tuple):
+                program_index = task
+                try:
+                    with self.lock:
+                        is_cached = program_index in self.streams
+                    if not is_cached:
+                        self.get_streams(program_index)
+                except Exception as e:
+                    xbmc.log("KyivstarStreamManager _update_worker: prefetch exception: %s" % str(e), xbmc.LOGERROR)
+                finally:
+                    self.update_queue.task_done()
+
+    def stop(self):
+        self.update_queue.put(None)
+        if self.worker_thread.is_alive():
+            self.worker_thread.join(timeout=3.0)
 
     def get_stream_id(self, stream):
         stream_info = (stream.resolution, stream.bandwidth)
@@ -326,7 +381,7 @@ class ChannelState():
 
         return streams[stream_id]
 
-    def update_timeline(self, stream_id, live, start_date, end_date):
+    def update_timeline(self, stream_id, live, start_date, end_date, window_end_date):
         with self.lock:
             program_index = self.program_index if live else None
             start_time = self.start_time if live else 0
@@ -351,15 +406,37 @@ class ChannelState():
                 return None
 
             if not stream.finished:
-                result = self.service.request.send(stream.url, ret_json=False)
-                if result.error:
-                    if not result.recoverable:
+                now = time.time()
+                is_in_window = start_time < window_end_date.timestamp() if window_end_date else True
+                if len(stream.segments) == 0 and is_in_window:
+                    result = self.service.request.send(stream.url, ret_json=False)
+                    if not result.error:
+                        stream.parse(result.value, result.url)
+                        stream.set_last_update(now)
+                    elif not result.recoverable:
                         if result.error.startswith('403'):
                             del self.streams[program_index]
                         xbmc.log("KyivstarStreamManager update_timeline: %s" % result.error, xbmc.LOGERROR)
                         return None
                 else:
-                    stream.parse(result.value, result.url)
+                    last_update = stream.get_last_update()
+                    with self.lock:
+                        is_queued = stream.url in self.pending_updates
+                    if not is_queued and (now - last_update >= stream.target_duration):
+                        with self.lock:
+                            self.pending_updates.add(stream.url)
+                        self.update_queue.put(stream)
+
+            if stream.finished:
+                prefetch_start_time = stream.get_end_time() - 2 * stream.target_duration
+                can_prefetch = prefetch_start_time <= end_date.timestamp() if end_date else False
+                if can_prefetch:
+                    next_program_index = self.get_next_program_index(program_index)
+                    if next_program_index is not None:
+                        with self.lock:
+                            is_cached = next_program_index in self.streams
+                        if not is_cached:
+                            self.update_queue.put(next_program_index)
 
             stream.set_start_time(start_time)
 
@@ -622,10 +699,16 @@ class KyivstarStreamManager():
                     outdated_states.append(asset_id)
 
             for asset_id in outdated_states:
+                self.channel_states[asset_id].stop()
                 del self.channel_states[asset_id]
         xbmc.log("KyivstarStreamManager check_active_states: active=%s outdated=%s" % (len(self.channel_states), len(outdated_states)), xbmc.LOGDEBUG)
 
     def stop(self):
+        with self.lock:
+            for asset_id in list(self.channel_states.keys()):
+                self.channel_states[asset_id].stop()
+            self.channel_states.clear()
+
         self.segment_cache.stop()
 
     def get_playlist_content(self, asset_id, virtual, epg):
@@ -639,6 +722,8 @@ class KyivstarStreamManager():
         with self.lock:
             if self.service.drop_channel_states:
                 self.service.drop_channel_states = False
+                for asset_id in list(self.channel_states.keys()):
+                    self.channel_states[asset_id].stop()
                 self.channel_states.clear()
 
             if asset_id not in self.channel_states:
@@ -704,7 +789,7 @@ class KyivstarStreamManager():
             else:
                 cache_end_date += timedelta(seconds=60)
 
-        program_index = channel_state.update_timeline(stream_id, live, start_date, cache_end_date)
+        program_index = channel_state.update_timeline(stream_id, live, start_date, cache_end_date, end_date)
         if program_index is None and date is not None:
             return None
 
