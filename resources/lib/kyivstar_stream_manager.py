@@ -693,11 +693,12 @@ class SegmentCacheManager():
                         self.queue_set.add(key)
                         self.queue.append(key)
 
-            for key in list(self.cache.keys()):
-                if key in valid_keys or key == self.process_key:
-                    continue
-                del self.cache[key]
-                self.queue_set.discard(key)
+            if len(cache_list) > 0:
+                for key in list(self.cache.keys()):
+                    if key in valid_keys or key == self.process_key:
+                        continue
+                    del self.cache[key]
+                    self.queue_set.discard(key)
 
             queue_size = len(self.queue)
             cache_size = len(self.cache)
