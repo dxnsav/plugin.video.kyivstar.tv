@@ -419,11 +419,13 @@ class ChannelState():
             start_time = program['epg']/1000 if program else 0
 
         start_program_index = program_index
+        need_start_time_correction = False
 
         if live:
             with self.lock:
                 if self.start_time == 0:
                     self.start_time = start_time
+                    need_start_time_correction = not self.virtual
                 else:
                     start_time = self.start_time
 
@@ -442,6 +444,34 @@ class ChannelState():
                     if not result.error:
                         stream.parse(result.value, result.url)
                         stream.set_last_update(now)
+                        if need_start_time_correction:
+                            if len(stream.segments) > 0:
+                                total_duration = stream.segments_end[-1]
+                                real_start_time = now - total_duration
+
+                                if real_start_time > start_date.timestamp():
+                                    prev_program_index = self.get_prev_program_index(program_index)
+                                    if prev_program_index is not None:
+                                        program_index = prev_program_index
+                                        start_program_index = prev_program_index
+                                        with self.lock:
+                                            self.program_index = prev_program_index
+
+                                        prev_program = self.get_program(prev_program_index)
+                                        prev_start_time = prev_program['epg']/1000 if prev_program else 0
+                                        prev_real_start_time = prev_start_time + real_start_time - start_time
+                                        
+                                        start_time = prev_real_start_time
+                                        with self.lock:
+                                            self.start_time = start_time
+
+                                        need_start_time_correction = False
+                                        continue
+                                else:
+                                    start_time = real_start_time
+                                    with self.lock:
+                                        self.start_time = start_time
+                            need_start_time_correction = False
                     elif not result.recoverable:
                         if result.error.startswith('403'):
                             xbmc.log("KyivstarStreamManager update_timeline: 403 Forbidden for cached stream %s. Cleared cache." % str(program_index), xbmc.LOGWARNING)
@@ -527,6 +557,22 @@ class ChannelState():
         program_list = self.get_program_list(date_index)
         if index < len(program_list):
             return (date_index, index)
+
+        return None
+
+    def get_prev_program_index(self, program_index):
+        if program_index is None:
+            return None
+        date_index = program_index[0]
+        index = program_index[1] - 1
+
+        if index >= 0:
+            return (date_index, index)
+
+        date_index -= timedelta(days=1)
+        program_list = self.get_program_list(date_index)
+        if len(program_list) > 0:
+            return (date_index, len(program_list) - 1)
 
         return None
 
