@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    var PLUGIN_BUILD = '2026-06-09-search-settings-home';
+    var PLUGIN_BUILD = '2026-06-09-settings-input-fix';
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
     var TITLE = 'Kyivstar TV';
@@ -238,6 +238,9 @@
     }
 
     function addParam(param, name, description, onChange) {
+        if (param.type === 'input' && typeof param.values === 'undefined') param.values = '';
+        if (param.type === 'input' && typeof param.placeholder === 'undefined') param.placeholder = '';
+
         var data = {
             component: COMPONENT,
             param: param,
