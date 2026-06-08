@@ -658,9 +658,16 @@
                 });
             },
             onSelect: function (params, close) {
-                var item = params && params.element ? params.element._kyivstar : null;
+                var card = params && params.element ? params.element : null;
+                var item = card ? card._kyivstar : null;
                 if (typeof close === 'function') close();
-                openKyivstarItem(item);
+
+                if (item && item.kind === 'channel') {
+                    openKyivstarItem(item);
+                    return;
+                }
+
+                openNativeFull(card);
             },
             onCancel: function () {
                 api.clear();
@@ -730,6 +737,28 @@
             pushRoute(item.route, item.title);
         } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
             playItem(new KyivstarApi(), item);
+        }
+    }
+
+    function openNativeFull(card) {
+        if (!card) return;
+
+        debugLog('info', 'search:native:open-full', {
+            assetId: card.id,
+            title: card.title || card.name || '',
+            source: card.source
+        });
+
+        if (Lampa.Router && Lampa.Router.call) {
+            Lampa.Router.call('full', card);
+            return;
+        }
+
+        if (Lampa.Activity && Lampa.Activity.push) {
+            Lampa.Activity.push(merge({
+                title: card.title || card.name || TITLE,
+                component: 'full'
+            }, card));
         }
     }
 
