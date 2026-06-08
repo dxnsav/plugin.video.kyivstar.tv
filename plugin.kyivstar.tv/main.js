@@ -53,15 +53,18 @@
 
         ensureDeviceId();
         addStyles();
-        addSettings();
         addComponent();
-        addMenuEntry();
+        addSettings();
 
         if (window.appready) {
+            addSideMenuEntry();
             initNotice();
         } else if (Lampa.Listener && Lampa.Listener.follow) {
             Lampa.Listener.follow('app', function (event) {
-                if (event.type === 'ready') initNotice();
+                if (event.type === 'ready') {
+                    addSideMenuEntry();
+                    initNotice();
+                }
             });
         }
     }
@@ -153,27 +156,23 @@
         });
     }
 
-    function addMenuEntry() {
-        var open = function () {
-            pushRoute({ type: 'root' }, TITLE);
-        };
+    function addSideMenuEntry() {
+        var list = $('.menu .menu__list').eq(0);
 
-        if (Lampa.Menu && Lampa.Menu.addButton) {
-            Lampa.Menu.addButton(iconSvg(), TITLE, open);
+        if (!list.length) {
+            setTimeout(addSideMenuEntry, 500);
             return;
         }
 
-        if (Lampa.Menu && Lampa.Menu.add) {
-            try {
-                Lampa.Menu.add(TITLE, open);
-            } catch (error) {
-                try {
-                    Lampa.Menu.add({ title: TITLE, icon: iconSvg(), onSelect: open });
-                } catch (innerError) {
-                    log('menu registration failed: ' + innerError.message);
-                }
-            }
-        }
+        $('.menu__item[data-action="kyivstar-tv"]').remove();
+
+        var item = $('<li class="menu__item selector" data-action="kyivstar-tv">' +
+            '<div class="menu__ico">' + iconSvg() + '</div>' +
+            '<div class="menu__text">' + TITLE + '</div>' +
+            '</li>');
+
+        item.on('hover:enter click', showMainMenu);
+        list.append(item);
     }
 
     function addComponent() {
@@ -186,6 +185,152 @@
             component: COMPONENT,
             route: route
         });
+    }
+
+    function showMainMenu() {
+        if (!Lampa.Select || !Lampa.Select.show) {
+            pushRoute({ type: 'root' }, TITLE);
+            return;
+        }
+
+        Lampa.Select.show({
+            title: TITLE,
+            items: [
+                { title: 'Live TV', action: 'channels' },
+                { title: 'Videos', action: 'catalog' },
+                { title: 'Search', action: 'search' },
+                { title: 'Settings', action: 'settings' },
+                { title: 'Refresh session', action: 'session' }
+            ],
+            onSelect: function (item) {
+                if (item.action === 'channels') pushRoute({ type: 'channels' }, 'Live TV');
+                else if (item.action === 'catalog') pushRoute({ type: 'catalog', offset: 0 }, 'Videos');
+                else if (item.action === 'search') {
+                    askText('Search Kyivstar TV', '', function (query) {
+                        if (query) pushRoute({ type: 'search', query: query }, 'Search: ' + query);
+                    });
+                } else if (item.action === 'settings') {
+                    showSettingsMenu(new KyivstarApi(), showMainMenu);
+                } else if (item.action === 'session') {
+                    refreshSession(new KyivstarApi());
+                }
+            },
+            onBack: function () {
+                if (Lampa.Controller && Lampa.Controller.toggle) Lampa.Controller.toggle('content');
+            }
+        });
+    }
+
+    function showSettingsMenu(api, onBack) {
+        var session = setting(KEYS.session);
+
+        if (!Lampa.Select || !Lampa.Select.show) {
+            notify('Lampa Select API is not available.');
+            return;
+        }
+
+        Lampa.Select.show({
+            title: TITLE + ' settings',
+            items: [
+                { title: 'Login type: ' + loginTypeTitle(setting(KEYS.loginType)), action: 'login-type' },
+                { title: 'Locale: ' + localeTitle(setting(KEYS.locale)), action: 'locale' },
+                { title: 'Append stream headers: ' + (boolSetting(KEYS.appendHeaders) ? 'On' : 'Off'), action: 'headers' },
+                { title: 'Personal account: ' + filled(setting(KEYS.username)), action: 'username' },
+                { title: 'Password: ' + filled(setting(KEYS.password)), action: 'password' },
+                { title: 'Phone number: ' + filled(setting(KEYS.phone)), action: 'phone' },
+                { title: 'SMS code: ' + filled(setting(KEYS.otp)), action: 'otp' },
+                { title: 'CORS proxy: ' + filled(setting(KEYS.proxy)), action: 'proxy' },
+                { title: 'Refresh session' + (session && session.userId ? ' (' + session.userId + ')' : ''), action: 'session' },
+                { title: 'Log out / clear session', action: 'logout' }
+            ],
+            onSelect: function (item) {
+                if (item.action === 'login-type') selectLoginType(api, onBack);
+                else if (item.action === 'locale') selectLocale(api, onBack);
+                else if (item.action === 'headers') {
+                    saveSetting(KEYS.appendHeaders, !boolSetting(KEYS.appendHeaders));
+                    showSettingsMenu(api, onBack);
+                } else if (item.action === 'username') editStoredValue('Personal account', KEYS.username, api, onBack);
+                else if (item.action === 'password') editStoredValue('Password', KEYS.password, api, onBack);
+                else if (item.action === 'phone') editStoredValue('Phone number', KEYS.phone, api, onBack);
+                else if (item.action === 'otp') editStoredValue('SMS code', KEYS.otp, api, onBack);
+                else if (item.action === 'proxy') editStoredValue('CORS proxy', KEYS.proxy, api, onBack);
+                else if (item.action === 'session') {
+                    refreshSession(api).then(function () {
+                        showSettingsMenu(api, onBack);
+                    });
+                } else if (item.action === 'logout') {
+                    logout(api).then(function () {
+                        showSettingsMenu(api, onBack);
+                    });
+                }
+            },
+            onBack: function () {
+                if (typeof onBack === 'function') onBack();
+                else if (Lampa.Controller && Lampa.Controller.toggle) Lampa.Controller.toggle('content');
+            }
+        });
+    }
+
+    function selectLoginType(api, onBack) {
+        selectStoredValue('Login type', KEYS.loginType, [
+            { title: 'Anonymous', value: 'anonymous' },
+            { title: 'Personal account', value: 'account' },
+            { title: 'Phone OTP', value: 'phone' }
+        ], api, onBack);
+    }
+
+    function selectLocale(api, onBack) {
+        selectStoredValue('Locale', KEYS.locale, [
+            { title: 'Ukrainian', value: 'uk_UA' },
+            { title: 'English', value: 'en_US' },
+            { title: 'Russian', value: 'ru_RU' }
+        ], api, onBack);
+    }
+
+    function selectStoredValue(title, key, values, api, onBack) {
+        var current = setting(key);
+
+        Lampa.Select.show({
+            title: title,
+            items: values.map(function (item) {
+                return {
+                    title: (item.value === current ? '* ' : '') + item.title,
+                    value: item.value
+                };
+            }),
+            onSelect: function (item) {
+                saveSetting(key, item.value);
+                if (key === KEYS.loginType || key === KEYS.locale) saveSetting(KEYS.session, null);
+                showSettingsMenu(api, onBack);
+            },
+            onBack: function () {
+                showSettingsMenu(api, onBack);
+            }
+        });
+    }
+
+    function editStoredValue(title, key, api, onBack) {
+        askText(title, setting(key) || '', function (value) {
+            saveSetting(key, value || '');
+            if (key !== KEYS.proxy && key !== KEYS.otp) saveSetting(KEYS.session, null);
+            showSettingsMenu(api, onBack);
+        });
+    }
+
+    function loginTypeTitle(value) {
+        if (value === 'account') return 'Personal account';
+        if (value === 'phone') return 'Phone OTP';
+        return 'Anonymous';
+    }
+
+    function localeTitle(value) {
+        if (value === 'en_US') return 'English';
+        if (value === 'ru_RU') return 'Russian';
+        return 'Ukrainian';
+    }
+
+    function filled(value) {
+        return value ? 'set' : 'empty';
     }
 
     function KyivstarComponent(object) {
@@ -332,6 +477,10 @@
                 refreshSession(api);
             } else if (item.kind === 'logout') {
                 logout(api);
+            } else if (item.kind === 'settings') {
+                showSettingsMenu(api, function () {
+                    pushRoute({ type: 'root' }, TITLE);
+                });
             } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
                 playItem(api, item);
             }
@@ -411,6 +560,11 @@
                 kind: 'search',
                 title: 'Search',
                 subtitle: 'Search movies and series'
+            },
+            {
+                kind: 'settings',
+                title: 'Settings',
+                subtitle: 'Login, locale, headers, proxy'
             },
             {
                 kind: 'session',
