@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    var PLUGIN_BUILD = '2026-06-09-layout-pagination-fix';
+    var PLUGIN_BUILD = '2026-06-09-native-lampa-source';
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
     var TITLE = 'Kyivstar TV';
@@ -12,12 +12,15 @@
     var REFERER = 'https://tv.kyivstar.ua/';
     var LIMIT = 24;
     var HOME_LIMIT = 14;
+    var NATIVE_MAIN_ROWS = 6;
     var CACHE_CHANNELS_MS = 15 * 60 * 1000;
     var CACHE_CATALOG_MS = 60 * 60 * 1000;
     var MAX_LOGS = 120;
     var requestCounter = 0;
     var settingsAdded = false;
     var searchSourceAdded = false;
+    var apiSourceAdded = false;
+    var fullPlayerHookAdded = false;
 
     var KEYS = {
         loginType: 'kyivstar_login_type',
@@ -63,6 +66,8 @@
             ensureDeviceId();
             addStyles();
             addComponent();
+            addApiSource();
+            addFullPlayerHook();
             addSettings();
             addSearchSource();
             window.plugin_kyivstar_tv_ready = true;
@@ -90,6 +95,8 @@
 
         if (window.appready) {
             addSideMenuEntry();
+            addApiSource();
+            addFullPlayerHook();
             addSettings();
             addSearchSource();
             initNotice();
@@ -97,6 +104,8 @@
             Lampa.Listener.follow('app', function (event) {
                 if (event.type === 'ready') {
                     addSideMenuEntry();
+                    addApiSource();
+                    addFullPlayerHook();
                     addSettings();
                     addSearchSource();
                     initNotice();
@@ -302,6 +311,320 @@
         debugLog('info', 'search:source-added', {});
     }
 
+    function addApiSource() {
+        if (apiSourceAdded) return;
+
+        if (!Lampa.Api || !Lampa.Api.sources) {
+            setTimeout(addApiSource, 500);
+            return;
+        }
+
+        try {
+            Lampa.Api.sources[COMPONENT] = createApiSource();
+
+            if (Lampa.Params && Lampa.Params.values && Lampa.Params.select) {
+                var values = merge({}, Lampa.Params.values.source || {});
+                values[COMPONENT] = TITLE;
+                Lampa.Params.select('source', values, Lampa.Storage.get('source', 'tmdb'));
+            }
+
+            apiSourceAdded = true;
+            debugLog('info', 'api:source-added', { source: COMPONENT });
+        } catch (error) {
+            debugLog('error', 'api:source-error', { error: error.message || String(error) });
+        }
+    }
+
+    function createApiSource() {
+        var base = Lampa.Api && Lampa.Api.sources ? Lampa.Api.sources.tmdb : null;
+        var source = base ? merge({}, base) : {};
+
+        source.main = sourceMain;
+        source.list = sourceList;
+        source.full = sourceFull;
+        source.img = sourceImg;
+        source.clear = function () {
+            new KyivstarApi().clear();
+        };
+        source.discovery = false;
+
+        return source;
+    }
+
+    function sourceMain(params, onComplete, onError) {
+        var api = new KyivstarApi();
+        var nextOffset = NATIVE_MAIN_ROWS;
+        var compilationsCache = [];
+
+        function loadRows(offset, limit, resolve, reject) {
+            api.getCompilations(null).catch(function (error) {
+                debugLog('warn', 'api:main:compilations-error', {
+                    error: error.message || String(error),
+                    status: error.status || error.decode_code || ''
+                });
+                return [];
+            }).then(function (compilations) {
+                compilationsCache = filterNativeCompilations(compilations);
+
+                var slice = compilationsCache.slice(offset, offset + limit);
+                var loaders = slice.map(function (compilation) {
+                    return loadNativeRow(api, compilation);
+                });
+
+                if (!loaders.length && offset === 0) {
+                    loaders.push(loadNativeRow(api, null));
+                }
+
+                return Promise.all(loaders);
+            }).then(function (rows) {
+                rows = buildRows(rows);
+
+                if (rows.length) resolve(rows);
+                else if (typeof reject === 'function') reject();
+            }).catch(function (error) {
+                debugLog('error', 'api:main:error', {
+                    error: error.message || String(error),
+                    status: error.status || error.decode_code || ''
+                });
+                if (typeof reject === 'function') reject();
+            });
+        }
+
+        loadRows(0, NATIVE_MAIN_ROWS, onComplete, onError);
+
+        return function (resolve, reject) {
+            var offset = nextOffset;
+            nextOffset += NATIVE_MAIN_ROWS;
+
+            if (compilationsCache.length && offset >= compilationsCache.length) {
+                if (typeof reject === 'function') reject();
+                return;
+            }
+
+            loadRows(offset, NATIVE_MAIN_ROWS, resolve, reject);
+        };
+    }
+
+    function sourceList(params, onComplete, onError) {
+        var api = new KyivstarApi();
+        var parsed = parseNativeList(params);
+        var page = Math.max(1, Number(params && params.page) || 1);
+        var offset = (page - 1) * LIMIT;
+
+        api.getContentAreaElements(parsed.compilationId, [], null, offset, LIMIT).then(function (assets) {
+            var cards = asArray(assets).map(mapAsset).map(mapNativeCard).filter(Boolean);
+
+            if (!cards.length && page === 1) {
+                if (typeof onError === 'function') onError();
+                return;
+            }
+
+            onComplete({
+                title: parsed.title,
+                url: parsed.url,
+                source: COMPONENT,
+                page: page,
+                total_pages: cards.length === LIMIT ? page + 1 : page,
+                total_results: cards.length === LIMIT ? (page + 1) * LIMIT : offset + cards.length,
+                results: cards
+            });
+        }).catch(function (error) {
+            debugLog('error', 'api:list:error', {
+                url: parsed.url,
+                page: page,
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+            if (typeof onError === 'function') onError();
+        });
+    }
+
+    function sourceFull(params, onComplete, onError) {
+        var api = new KyivstarApi();
+        var item = extractKyivstarItem(params);
+
+        if (!item) {
+            if (typeof onError === 'function') onError();
+            return;
+        }
+
+        function complete(mapped) {
+            onComplete({
+                movie: buildFullMovie(mapped || item)
+            });
+        }
+
+        if (!item.assetId || item.kind === 'channel') {
+            complete(item);
+            return;
+        }
+
+        api.getAssetInfo(item.assetId).then(function (info) {
+            var asset = asArray(info)[0];
+            if (!asset) {
+                complete(item);
+                return;
+            }
+
+            complete(mapAsset(asset));
+        }).catch(function (error) {
+            debugLog('warn', 'api:full:details-error', {
+                assetId: item.assetId,
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+            complete(item);
+        });
+    }
+
+    function sourceImg(src) {
+        return src || '';
+    }
+
+    function addFullPlayerHook() {
+        if (fullPlayerHookAdded) return;
+
+        if (!Lampa.Listener || !Lampa.Listener.follow) {
+            setTimeout(addFullPlayerHook, 500);
+            return;
+        }
+
+        Lampa.Listener.follow('full', function (event) {
+            var movie = event && event.data ? event.data.movie : null;
+            var item = movie && movie._kyivstar ? movie._kyivstar : null;
+            var button;
+
+            if (!item || movie.source !== COMPONENT || event.type !== 'complite' || !event.body) return;
+
+            button = $(event.body).find('.button--play').eq(0);
+            if (!button.length) return;
+
+            button.off('hover:enter click');
+            button.on('hover:enter click', function (e) {
+                if (e && e.preventDefault) e.preventDefault();
+                if (e && e.stopPropagation) e.stopPropagation();
+                openKyivstarItem(item);
+                return false;
+            });
+        });
+
+        fullPlayerHookAdded = true;
+        debugLog('info', 'full:player-hook-added', {});
+    }
+
+    function filterNativeCompilations(compilations) {
+        return asArray(compilations).filter(function (item) {
+            return item && item.compilationElementType !== 'CONTENT_GROUP';
+        });
+    }
+
+    function loadNativeRow(api, compilation) {
+        var title = compilation ? (compilation.displayName || compilation.name || 'Videos') : 'Videos';
+        var id = compilation ? compilation.id : null;
+        var url = nativeListUrl(id);
+
+        return api.getContentAreaElements(id, [], null, 0, LIMIT).then(function (assets) {
+            var cards = asArray(assets).map(mapAsset).map(mapNativeCard).filter(Boolean);
+
+            return {
+                title: title,
+                url: url,
+                source: COMPONENT,
+                page: 1,
+                total_pages: cards.length === LIMIT ? 2 : 1,
+                total_results: cards.length === LIMIT ? LIMIT * 2 : cards.length,
+                results: cards
+            };
+        }).catch(function (error) {
+            debugLog('warn', 'api:row:error', {
+                title: title,
+                compilationId: id || '',
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+            return null;
+        });
+    }
+
+    function nativeListUrl(compilationId) {
+        return compilationId ? 'kyivstar/compilation/' + encodeURIComponent(compilationId) : 'kyivstar/videos';
+    }
+
+    function parseNativeList(params) {
+        var url = params && params.url ? String(params.url) : 'kyivstar/videos';
+        var title = params && params.title ? params.title : 'Videos';
+        var prefix = 'kyivstar/compilation/';
+        var compilationId = null;
+
+        if (url.indexOf(prefix) === 0) {
+            try {
+                compilationId = decodeURIComponent(url.substr(prefix.length));
+            } catch (error) {
+                compilationId = url.substr(prefix.length);
+            }
+        }
+
+        return {
+            url: url,
+            title: title,
+            compilationId: compilationId
+        };
+    }
+
+    function extractKyivstarItem(params) {
+        if (!params) return null;
+        if (params._kyivstar) return params._kyivstar;
+        if (params.card && params.card._kyivstar) return params.card._kyivstar;
+
+        return {
+            kind: params.first_air_date ? 'nav' : 'vod',
+            title: params.title || params.name || params.original_title || params.original_name || TITLE,
+            subtitle: '',
+            image: params.poster || params.img || params.background_image || '',
+            assetId: params.id,
+            videoType: params.videoType || 'VIRTUAL',
+            raw: params.raw || {}
+        };
+    }
+
+    function buildFullMovie(item) {
+        var raw = item.raw || {};
+        var isSeries = item.kind === 'nav' || raw.assetType === 'SERIES';
+        var image = item.image || pickImage(raw.images) || raw.image || '';
+        var background = pickBackdrop(raw.images) || image;
+        var release = raw.release_date || raw.releaseDate || item.subtitle || '';
+        var date = subtitleYear(release);
+        var rating = itemRating(item);
+        var runtime = raw.duration ? Math.round(Number(raw.duration) / 60) : 0;
+        var description = raw.description || raw.longDescription || raw.shortDescription || raw.plot || raw.overview || '';
+        var movie = {
+            id: item.assetId || item.title,
+            source: COMPONENT,
+            method: isSeries ? 'tv' : 'movie',
+            title: item.title,
+            original_title: item.title,
+            release_date: isSeries ? '' : date,
+            first_air_date: isSeries ? date : '',
+            overview: description,
+            runtime: runtime || 0,
+            vote_average: rating || 0,
+            genres: [],
+            poster: image,
+            img: image,
+            background_image: background,
+            poster_path: '',
+            backdrop_path: '',
+            _kyivstar: item
+        };
+
+        if (isSeries) {
+            movie.name = item.title;
+            movie.original_name = item.title;
+        }
+
+        return movie;
+    }
+
     function createSearchSource() {
         var api = new KyivstarApi();
 
@@ -367,21 +690,29 @@
     }
 
     function mapNativeCard(item) {
+        var raw = item.raw || {};
+        var isSeries = item.kind === 'nav' || raw.assetType === 'SERIES';
+        var date = subtitleYear(raw.release_date || raw.releaseDate || item.subtitle);
+        var rating = itemRating(item);
         var card = {
             id: item.assetId || item.title,
             title: item.title,
             original_title: item.title,
-            release_date: subtitleYear(item.subtitle),
+            release_date: isSeries ? '' : date,
+            first_air_date: isSeries ? date : '',
+            vote_average: rating,
             poster: item.image || '',
             img: item.image || '',
             source: COMPONENT,
+            method: isSeries ? 'tv' : 'movie',
+            videoType: item.videoType || 'VIRTUAL',
+            raw: raw,
             _kyivstar: item
         };
 
-        if (item.kind === 'nav') {
+        if (isSeries) {
             card.name = item.title;
             card.original_name = item.title;
-            card.first_air_date = card.release_date;
         }
 
         return card;
@@ -420,6 +751,18 @@
     }
 
     function showMainMenu() {
+        addApiSource();
+
+        if (apiSourceAdded && Lampa.Activity && Lampa.Activity.push) {
+            Lampa.Activity.push({
+                title: TITLE,
+                component: 'main',
+                source: COMPONENT,
+                page: 1
+            });
+            return;
+        }
+
         pushRoute({ type: 'home' }, TITLE);
     }
 
@@ -1129,7 +1472,7 @@
         var result = [];
 
         rows.forEach(function (row) {
-            if (row.results && row.results.length) result.push(row);
+            if (row && row.results && row.results.length) result.push(row);
         });
 
         return result;
@@ -1148,6 +1491,20 @@
         return year && /^\d{4}$/.test(year) ? year + '-01-01' : '';
     }
 
+    function itemRating(item) {
+        var raw = item && item.raw ? item.raw : {};
+        var rating = raw.ratings && raw.ratings[0] ? raw.ratings[0].movieRating : '';
+        var match;
+
+        if (!rating && item && item.subtitle) {
+            match = String(item.subtitle).match(/Rating\s+([\d.]+)/i);
+            if (match) rating = match[1];
+        }
+
+        rating = parseFloat(rating);
+        return isNaN(rating) ? 0 : rating;
+    }
+
     function normalizeYear(value) {
         if (!value) return '';
         var text = String(value);
@@ -1163,7 +1520,8 @@
     }
 
     function pickImage(images) {
-        if (!images || !images.length) return '';
+        images = asArray(images);
+        if (!images.length) return '';
 
         var preferred = null;
         for (var i = 0; i < images.length; i++) {
@@ -1174,6 +1532,29 @@
         }
 
         return (preferred || images[0]).url || '';
+    }
+
+    function pickBackdrop(images) {
+        images = asArray(images);
+        if (!images.length) return '';
+
+        for (var i = 0; i < images.length; i++) {
+            if (images[i].url && /16_9|landscape|backdrop|background/i.test(images[i].url + ' ' + (images[i].type || ''))) {
+                return images[i].url;
+            }
+        }
+
+        return '';
+    }
+
+    function asArray(value) {
+        if (!value) return [];
+        if (Object.prototype.toString.call(value) === '[object Array]') return value;
+        if (value.items && Object.prototype.toString.call(value.items) === '[object Array]') return value.items;
+        if (value.elements && Object.prototype.toString.call(value.elements) === '[object Array]') return value.elements;
+        if (value.results && Object.prototype.toString.call(value.results) === '[object Array]') return value.results;
+        if (typeof value.length === 'number') return Array.prototype.slice.call(value);
+        return [];
     }
 
     function askText(title, value, done) {
