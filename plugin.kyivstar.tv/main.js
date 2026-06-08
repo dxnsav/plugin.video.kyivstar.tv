@@ -12,6 +12,8 @@
     var LIMIT = 40;
     var CACHE_CHANNELS_MS = 15 * 60 * 1000;
     var CACHE_CATALOG_MS = 60 * 60 * 1000;
+    var MAX_LOGS = 120;
+    var requestCounter = 0;
 
     var KEYS = {
         loginType: 'kyivstar_login_type',
@@ -25,7 +27,8 @@
         appendHeaders: 'kyivstar_append_stream_headers',
         session: 'kyivstar_session',
         pendingPhoneSession: 'kyivstar_pending_phone_session',
-        cacheKeys: 'kyivstar_cache_keys'
+        cacheKeys: 'kyivstar_cache_keys',
+        logs: 'kyivstar_logs'
     };
 
     var DEFAULTS = {};
@@ -41,6 +44,7 @@
     DEFAULTS[KEYS.session] = null;
     DEFAULTS[KEYS.pendingPhoneSession] = null;
     DEFAULTS[KEYS.cacheKeys] = [];
+    DEFAULTS[KEYS.logs] = [];
 
     function boot() {
         if (!window.Lampa || !window.$ || !Lampa.Storage) {
@@ -61,8 +65,19 @@
                 show: showMainMenu,
                 settings: function () {
                     showSettingsMenu(new KyivstarApi(), showMainMenu);
+                },
+                logs: function () {
+                    return setting(KEYS.logs);
+                },
+                clearLogs: function () {
+                    clearDebugLogs();
                 }
             };
+            debugLog('info', 'boot:ready', {
+                appready: !!window.appready,
+                lampa: !!window.Lampa,
+                jquery: !!window.$
+            });
         } catch (error) {
             window.plugin_kyivstar_tv_error = error && error.message ? error.message : String(error);
             console.error(TITLE + ' boot failed:', error);
@@ -87,6 +102,30 @@
 
     function log(message) {
         console.log(TITLE + ': ' + message);
+    }
+
+    function debugLog(level, event, details) {
+        var entry = {
+            time: new Date().toISOString(),
+            level: level || 'info',
+            event: event || 'event',
+            details: sanitize(details || {})
+        };
+        var logs = setting(KEYS.logs) || [];
+
+        logs.push(entry);
+        while (logs.length > MAX_LOGS) logs.shift();
+        saveSetting(KEYS.logs, logs);
+
+        var line = '[KyivstarTV] ' + entry.level.toUpperCase() + ' ' + entry.event + ' ' + safeJson(entry.details);
+        if (entry.level === 'error' && console.error) console.error(line);
+        else if (entry.level === 'warn' && console.warn) console.warn(line);
+        else console.log(line);
+    }
+
+    function clearDebugLogs() {
+        saveSetting(KEYS.logs, []);
+        debugLog('info', 'logs:cleared', {});
     }
 
     function notify(message) {
@@ -189,6 +228,7 @@
 
         item.on('hover:enter click', showMainMenu);
         list.append(item);
+        debugLog('info', 'menu:added', {});
     }
 
     function addComponent() {
@@ -221,7 +261,8 @@
                 { title: 'Videos', action: 'catalog' },
                 { title: 'Search', action: 'search' },
                 { title: 'Settings', action: 'settings' },
-                { title: 'Refresh session', action: 'session' }
+                { title: 'Refresh session', action: 'session' },
+                { title: 'Diagnostics', action: 'diagnostics' }
             ],
             onSelect: function (item) {
                 if (item.action === 'channels') pushRoute({ type: 'channels' }, 'Live TV');
@@ -234,6 +275,8 @@
                     showSettingsMenu(new KyivstarApi(), showMainMenu);
                 } else if (item.action === 'session') {
                     refreshSession(new KyivstarApi());
+                } else if (item.action === 'diagnostics') {
+                    showDiagnosticsMenu(showMainMenu);
                 }
             },
             onBack: function () {
@@ -261,7 +304,10 @@
                 { title: 'Phone number: ' + filled(setting(KEYS.phone)), action: 'phone' },
                 { title: 'SMS code: ' + filled(setting(KEYS.otp)), action: 'otp' },
                 { title: 'CORS proxy: ' + filled(setting(KEYS.proxy)), action: 'proxy' },
+                { title: 'Send SMS code now', action: 'send-otp' },
                 { title: 'Refresh session' + (session && session.userId ? ' (' + session.userId + ')' : ''), action: 'session' },
+                { title: 'Diagnostics / logs', action: 'diagnostics' },
+                { title: 'Clear phone OTP state', action: 'clear-phone' },
                 { title: 'Log out / clear session', action: 'logout' }
             ],
             onSelect: function (item) {
@@ -275,10 +321,24 @@
                 else if (item.action === 'phone') editStoredValue('Phone number', KEYS.phone, api, onBack);
                 else if (item.action === 'otp') editStoredValue('SMS code', KEYS.otp, api, onBack);
                 else if (item.action === 'proxy') editStoredValue('CORS proxy', KEYS.proxy, api, onBack);
+                else if (item.action === 'send-otp') {
+                    sendSmsCode(api).then(function () {
+                        showSettingsMenu(api, onBack);
+                    });
+                }
                 else if (item.action === 'session') {
                     refreshSession(api).then(function () {
                         showSettingsMenu(api, onBack);
                     });
+                } else if (item.action === 'diagnostics') {
+                    showDiagnosticsMenu(function () {
+                        showSettingsMenu(api, onBack);
+                    });
+                } else if (item.action === 'clear-phone') {
+                    saveSetting(KEYS.pendingPhoneSession, null);
+                    saveSetting(KEYS.otp, '');
+                    debugLog('info', 'auth:phone:state-cleared', {});
+                    showSettingsMenu(api, onBack);
                 } else if (item.action === 'logout') {
                     logout(api).then(function () {
                         showSettingsMenu(api, onBack);
@@ -336,6 +396,89 @@
             if (key !== KEYS.proxy && key !== KEYS.otp) saveSetting(KEYS.session, null);
             showSettingsMenu(api, onBack);
         });
+    }
+
+    function sendSmsCode(api) {
+        var phone = normalizePhone(setting(KEYS.phone));
+
+        debugLog('info', 'otp:manual:start', {
+            phone: maskPhone(phone),
+            hasPendingSession: !!(setting(KEYS.pendingPhoneSession) && setting(KEYS.pendingPhoneSession).sessionId)
+        });
+
+        if (!phone) {
+            notify('Set phone number first.');
+            debugLog('error', 'otp:manual:no-phone', {});
+            return Promise.resolve();
+        }
+
+        notify('Sending SMS code...');
+
+        return api.ensurePhonePendingSession().then(function (phoneSession) {
+            return api.sendOtp(phoneSession.sessionId, phone);
+        }).then(function () {
+            notify('SMS code request sent. Check your phone.');
+            debugLog('info', 'otp:manual:sent', {
+                phone: maskPhone(phone)
+            });
+        }).catch(function (error) {
+            notify(error.message || String(error));
+            debugLog('error', 'otp:manual:error', {
+                phone: maskPhone(phone),
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+        });
+    }
+
+    function showDiagnosticsMenu(onBack) {
+        var logs = setting(KEYS.logs) || [];
+        var items = [
+            { title: 'Print logs to console (' + logs.length + ')', action: 'print' },
+            { title: 'Clear logs', action: 'clear' }
+        ];
+        var start = Math.max(0, logs.length - 35);
+
+        for (var i = logs.length - 1; i >= start; i--) {
+            var entry = logs[i];
+            items.push({
+                title: formatLogEntry(entry),
+                action: 'noop'
+            });
+        }
+
+        Lampa.Select.show({
+            title: TITLE + ' diagnostics',
+            items: items,
+            onSelect: function (item) {
+                if (item.action === 'print') {
+                    printDebugLogs();
+                    notify('Kyivstar TV logs printed to console.');
+                    showDiagnosticsMenu(onBack);
+                } else if (item.action === 'clear') {
+                    clearDebugLogs();
+                    showDiagnosticsMenu(onBack);
+                }
+            },
+            onBack: function () {
+                if (typeof onBack === 'function') onBack();
+                else showMainMenu();
+            }
+        });
+    }
+
+    function printDebugLogs() {
+        var logs = setting(KEYS.logs) || [];
+        console.log('[KyivstarTV] LOG DUMP START (' + logs.length + ')');
+        logs.forEach(function (entry) {
+            console.log('[KyivstarTV] ' + formatLogEntry(entry));
+        });
+        console.log('[KyivstarTV] LOG DUMP END');
+    }
+
+    function formatLogEntry(entry) {
+        var time = entry.time ? entry.time.replace(/^.*T/, '').replace(/\..*$/, '') : '';
+        return time + ' ' + String(entry.level || 'info').toUpperCase() + ' ' + entry.event + ' ' + safeJson(entry.details || {});
     }
 
     function loginTypeTitle(value) {
@@ -822,26 +965,58 @@
     }
 
     function refreshSession(api) {
+        debugLog('info', 'session:refresh:start', {
+            loginType: setting(KEYS.loginType),
+            phone: maskPhone(normalizePhone(setting(KEYS.phone))),
+            hasOtp: !!setting(KEYS.otp),
+            hasSession: !!(setting(KEYS.session) && setting(KEYS.session).sessionId)
+        });
+
         return api.ensureSession(true).then(function () {
             notify('Kyivstar TV session refreshed.');
+            debugLog('info', 'session:refresh:ok', {
+                userId: setting(KEYS.session) && setting(KEYS.session).userId
+            });
         }).catch(function (error) {
             notify(error.message || String(error));
+            debugLog('error', 'session:refresh:error', {
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
         });
     }
 
     function logout(api) {
+        debugLog('info', 'session:logout:start', {
+            hasSession: !!(setting(KEYS.session) && setting(KEYS.session).sessionId)
+        });
+
         return api.logout().then(function () {
             notify('Kyivstar TV session cleared.');
+            debugLog('info', 'session:logout:ok', {});
         }).catch(function (error) {
             notify(error.message || String(error));
+            debugLog('error', 'session:logout:error', {
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
         });
     }
 
     function playItem(api, item) {
         notify('Resolving stream...');
+        debugLog('info', 'play:resolve:start', {
+            assetId: item.assetId,
+            type: item.videoType,
+            title: item.title
+        });
 
         return api.getStreamUrl(item.assetId, item.videoType).then(function (stream) {
             var url = decorateStreamUrl(stream.url);
+            debugLog('info', 'play:resolve:ok', {
+                assetId: item.assetId,
+                hasUrl: !!stream.url
+            });
 
             Lampa.Player.play({
                 title: item.title,
@@ -851,6 +1026,11 @@
             });
         }).catch(function (error) {
             notify(error.message || String(error));
+            debugLog('error', 'play:resolve:error', {
+                assetId: item.assetId,
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
         });
     }
 
@@ -926,6 +1106,12 @@
         var loginType = setting(KEYS.loginType);
         var loginPromise;
 
+        debugLog('info', 'auth:ensure:start', {
+            force: !!force,
+            loginType: loginType,
+            hasCurrentSession: !!(current && current.sessionId)
+        });
+
         if (loginType === 'account') {
             loginPromise = this.loginAccount();
         } else if (loginType === 'phone') {
@@ -944,17 +1130,30 @@
                 sessionId: profile.sessionId
             });
 
+            debugLog('info', 'auth:ensure:ok', {
+                userId: profile.userId,
+                loginType: loginType
+            });
+
             return setting(KEYS.session);
         });
     };
 
     KyivstarApi.prototype.loginAnonymous = function () {
+        debugLog('info', 'auth:anonymous:start', {});
+
         return this.request('authentication/login', {
             method: 'POST',
             form: {
                 username: AUTH_REALM + '\\anonymous',
                 password: 'anonymous'
             }
+        }).then(function (profile) {
+            debugLog('info', 'auth:anonymous:ok', {
+                userId: profile && profile.userId,
+                hasSession: !!(profile && profile.sessionId)
+            });
+            return profile;
         });
     };
 
@@ -980,18 +1179,21 @@
 
     KyivstarApi.prototype.loginPhone = function () {
         var self = this;
-        var phone = setting(KEYS.phone);
+        var phone = normalizePhone(setting(KEYS.phone));
         var otp = setting(KEYS.otp);
         var pending = setting(KEYS.pendingPhoneSession);
+
+        debugLog('info', 'auth:phone:start', {
+            phone: maskPhone(phone),
+            hasOtp: !!otp,
+            hasPendingSession: !!(pending && pending.sessionId)
+        });
 
         if (!phone) {
             return Promise.reject(new Error('Set phone number in Kyivstar TV settings.'));
         }
 
-        var pendingPromise = pending && pending.sessionId ? Promise.resolve(pending) : this.loginAnonymous().then(function (anonymous) {
-            saveSetting(KEYS.pendingPhoneSession, anonymous);
-            return anonymous;
-        });
+        var pendingPromise = this.ensurePhonePendingSession();
 
         return pendingPromise.then(function (phoneSession) {
             if (!otp) {
@@ -1007,6 +1209,9 @@
                     otp: otp
                 }
             }).then(function (profile) {
+                debugLog('info', 'auth:phone:otp-login:ok', {
+                    userId: profile && profile.userId
+                });
                 saveSetting(KEYS.otp, '');
                 saveSetting(KEYS.pendingPhoneSession, null);
                 return profile;
@@ -1015,7 +1220,36 @@
         });
     };
 
+    KyivstarApi.prototype.ensurePhonePendingSession = function () {
+        var pending = setting(KEYS.pendingPhoneSession);
+
+        if (pending && pending.sessionId) {
+            debugLog('info', 'auth:phone:pending:reuse', {
+                userId: pending.userId,
+                hasSession: true
+            });
+            return Promise.resolve(pending);
+        }
+
+        debugLog('info', 'auth:phone:pending:create', {});
+
+        return this.loginAnonymous().then(function (anonymous) {
+            saveSetting(KEYS.pendingPhoneSession, anonymous);
+            debugLog('info', 'auth:phone:pending:created', {
+                userId: anonymous && anonymous.userId,
+                hasSession: !!(anonymous && anonymous.sessionId)
+            });
+            return anonymous;
+        });
+    };
+
     KyivstarApi.prototype.sendOtp = function (sessionId, phone) {
+        phone = normalizePhone(phone);
+        debugLog('info', 'otp:request:start', {
+            phone: maskPhone(phone),
+            hasSession: !!sessionId
+        });
+
         return this.request('v2/otp;jsessionid=' + encodeURIComponent(sessionId), {
             method: 'POST',
             json: {
@@ -1024,6 +1258,19 @@
                 channel: 'sms'
             },
             dataType: 'text'
+        }).then(function (result) {
+            debugLog('info', 'otp:request:ok', {
+                phone: maskPhone(phone),
+                emptyResponse: result === '' || result === null || result === undefined
+            });
+            return result;
+        }).catch(function (error) {
+            debugLog('error', 'otp:request:error', {
+                phone: maskPhone(phone),
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+            throw error;
         });
     };
 
@@ -1183,6 +1430,8 @@
         var headers = merge({}, options.headers || {});
         var dataType = options.dataType || 'json';
         var postData = false;
+        var id = ++requestCounter;
+        var start = Date.now();
 
         if (options.json !== undefined) {
             postData = JSON.stringify(options.json);
@@ -1191,8 +1440,23 @@
             postData = options.form;
         }
 
+        debugLog('info', 'request:start', {
+            id: id,
+            method: postData ? 'POST' : method,
+            url: sanitizeUrl(url),
+            dataType: dataType,
+            body: summarizeBody(postData)
+        });
+
         return new Promise(function (resolve, reject) {
             var ok = function (data) {
+                debugLog('info', 'request:ok', {
+                    id: id,
+                    ms: Date.now() - start,
+                    url: sanitizeUrl(url),
+                    data: summarizeData(data)
+                });
+
                 if (dataType === 'json' && typeof data === 'string') {
                     try {
                         resolve(JSON.parse(data));
@@ -1206,11 +1470,24 @@
             };
 
             var fail = function (error) {
-                reject(normalizeRequestError(error));
+                var normalized = normalizeRequestError(error);
+                debugLog('error', 'request:error', {
+                    id: id,
+                    ms: Date.now() - start,
+                    url: sanitizeUrl(url),
+                    status: normalized.status || normalized.decode_code || '',
+                    error: normalized.message || String(normalized),
+                    body: summarizeData(normalized.body || normalized.responseText || '')
+                });
+                reject(normalized);
             };
 
             if (network && (network.native || network.silent)) {
                 var methodName = network.native ? 'native' : 'silent';
+                debugLog('info', 'request:transport', {
+                    id: id,
+                    transport: methodName
+                });
                 network.timeout(20000);
                 network[methodName](url, ok, fail, postData, {
                     type: method,
@@ -1221,6 +1498,10 @@
                 return;
             }
 
+            debugLog('info', 'request:transport', {
+                id: id,
+                transport: 'fetch'
+            });
             fetchRequest(url, method, headers, postData, dataType).then(ok).catch(fail);
         });
     }
@@ -1274,6 +1555,111 @@
         }
 
         return normalized;
+    }
+
+    function normalizePhone(value) {
+        var digits = String(value || '').replace(/\D/g, '');
+
+        if (digits.length === 10 && digits.charAt(0) === '0') {
+            digits = '38' + digits;
+        }
+
+        return digits;
+    }
+
+    function maskPhone(value) {
+        var digits = normalizePhone(value);
+        if (!digits) return '';
+        if (digits.length <= 6) return digits.replace(/\d/g, '*');
+        return digits.substr(0, 5) + '***' + digits.substr(digits.length - 2);
+    }
+
+    function sanitizeUrl(url) {
+        return String(url || '')
+            .replace(/jsessionid=[^?&]+/g, 'jsessionid=***')
+            .replace(/([?&]otp=)[^&]+/g, '$1***')
+            .replace(/([?&]pin=)[^&]+/g, '$1***');
+    }
+
+    function sanitize(value) {
+        var result;
+        var key;
+
+        if (value === null || value === undefined) return value;
+        if (typeof value === 'string') return sanitizeString(value);
+        if (typeof value === 'number' || typeof value === 'boolean') return value;
+
+        if (Object.prototype.toString.call(value) === '[object Array]') {
+            result = [];
+            for (var i = 0; i < value.length; i++) result.push(sanitize(value[i]));
+            return result;
+        }
+
+        if (typeof value === 'object') {
+            result = {};
+            for (key in value) {
+                if (Object.prototype.hasOwnProperty.call(value, key)) {
+                    if (/password|otp|token|pin/i.test(key) || /sessionId|jsessionid|pendingPhoneSession|^session$/i.test(key)) result[key] = '***';
+                    else if (/phone/i.test(key)) result[key] = maskPhone(value[key]);
+                    else if (/url/i.test(key)) result[key] = sanitizeUrl(value[key]);
+                    else result[key] = sanitize(value[key]);
+                }
+            }
+            return result;
+        }
+
+        return String(value);
+    }
+
+    function sanitizeString(value) {
+        return String(value)
+            .replace(/jsessionid=[^?&\s]+/g, 'jsessionid=***')
+            .replace(/557455cfe4b04ad886a6ae41\\[0-9+]+/g, AUTH_REALM + '\\' + '***');
+    }
+
+    function summarizeBody(body) {
+        if (!body) return 'none';
+
+        if (typeof body === 'string') {
+            try {
+                return sanitize(JSON.parse(body));
+            } catch (error) {
+                return sanitizeString(body).substr(0, 240);
+            }
+        }
+
+        return sanitize(body);
+    }
+
+    function summarizeData(data) {
+        var summary = {};
+        var keys = [];
+        var key;
+
+        if (data === '' || data === null || data === undefined) return 'empty';
+        if (typeof data === 'string') return sanitizeString(data).substr(0, 240);
+        if (typeof data !== 'object') return data;
+
+        for (key in data) {
+            if (Object.prototype.hasOwnProperty.call(data, key)) keys.push(key);
+        }
+
+        summary.type = Object.prototype.toString.call(data).replace('[object ', '').replace(']', '');
+        summary.keys = keys.slice(0, 12);
+        if (data.userId) summary.userId = data.userId;
+        if (data.error) summary.error = data.error;
+        if (data.description) summary.description = data.description;
+        if (typeof data.length === 'number') summary.length = data.length;
+
+        return sanitize(summary);
+    }
+
+    function safeJson(value) {
+        try {
+            return JSON.stringify(value);
+        } catch (error) {
+            return String(value);
+        }
     }
 
     function applyProxy(url) {
