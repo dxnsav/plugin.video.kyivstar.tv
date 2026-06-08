@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    var PLUGIN_BUILD = '2026-06-09-settings-input-fix';
+    var PLUGIN_BUILD = '2026-06-09-layout-pagination-fix';
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
     var TITLE = 'Kyivstar TV';
@@ -10,7 +10,8 @@
     var DEFAULT_LOCALE = 'uk_UA';
     var USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64; rv:138.0) Gecko/20100101 Firefox/138.0';
     var REFERER = 'https://tv.kyivstar.ua/';
-    var LIMIT = 40;
+    var LIMIT = 24;
+    var HOME_LIMIT = 14;
     var CACHE_CHANNELS_MS = 15 * 60 * 1000;
     var CACHE_CATALOG_MS = 60 * 60 * 1000;
     var MAX_LOGS = 120;
@@ -640,13 +641,16 @@
         var api = new KyivstarApi();
         var html = $('<div class="kyivstar-tv"></div>');
         var body = $('<div class="kyivstar-tv__body"></div>');
+        var content = $('<div class="kyivstar-tv__content"></div>');
         var scroll = Lampa.Scroll ? new Lampa.Scroll({ mask: true, over: true }) : null;
-        var scrollBody = scroll ? scroll.render(true) : body;
         var activeItems = [];
+        var lastActivated = { key: '', time: 0 };
 
         if (scroll) {
-            html.append(scrollBody);
+            scroll.append(content);
+            html.append(scroll.render(true));
         } else {
+            body.append(content);
             html.append(body);
         }
 
@@ -782,7 +786,7 @@
             card.append(meta);
 
             card.on('hover:enter click', function () {
-                activate(item);
+                activateOnce(item);
             });
             card.on('hover:focus focus', function () {
                 scrollRowToCard(card);
@@ -790,6 +794,24 @@
             });
 
             return card;
+        }
+
+        function activateOnce(item) {
+            var key = activationKey(item);
+            var now = Date.now();
+
+            if (lastActivated.key === key && now - lastActivated.time < 700) return;
+
+            lastActivated.key = key;
+            lastActivated.time = now;
+            activate(item);
+        }
+
+        function activationKey(item) {
+            if (!item) return '';
+            if (item.assetId) return item.kind + ':' + item.assetId;
+            if (item.route) return item.kind + ':' + item.route.type + ':' + (item.route.compilationId || item.route.groupId || item.title || '');
+            return item.kind + ':' + (item.title || '');
         }
 
         function activate(item) {
@@ -827,7 +849,7 @@
         }
 
         function target() {
-            return scroll ? scrollBody : body;
+            return content;
         }
 
         function scrollRowToCard(card) {
@@ -927,7 +949,17 @@
             });
 
             if (categories.length) rows.push({ title: 'Categories', items: categories });
-            if (videos.length) rows.push({ title: 'Videos', items: videos.map(mapAsset) });
+            if (videos.length) {
+                rows.push({
+                    title: 'Videos',
+                    items: videos.slice(0, HOME_LIMIT).map(mapAsset).concat(videos.length > HOME_LIMIT ? [{
+                        kind: 'nav',
+                        title: 'More',
+                        subtitle: 'Open videos',
+                        route: { type: 'catalog', offset: 0 }
+                    }] : [])
+                });
+            }
 
             return { rows: rows };
         });
@@ -959,50 +991,24 @@
 
     function loadCatalog(route, api) {
         var offset = route.offset || 0;
-        var compilationPromise = Promise.resolve([]);
 
-        if (offset === 0 && !route.compilationId) {
-            compilationPromise = api.getCompilations(null).then(function (compilations) {
-                return compilations.filter(function (item) {
-                    return item.compilationElementType !== 'CONTENT_GROUP';
-                });
+        return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, LIMIT).then(function (elems) {
+            var items = [];
+
+            elems.forEach(function (asset) {
+                items.push(mapAsset(asset));
             });
-        }
 
-        return compilationPromise.then(function (compilations) {
-            return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, LIMIT).then(function (elems) {
-                var items = [];
-
-                compilations.forEach(function (compilation) {
-                    items.push({
-                        kind: 'nav',
-                        title: compilation.displayName || compilation.name || 'Selection',
-                        subtitle: 'Selection',
-                        image: pickImage(compilation.images),
-                        route: {
-                            type: 'catalog',
-                            compilationId: compilation.id,
-                            compilationName: compilation.displayName || compilation.name || 'Selection',
-                            offset: 0
-                        }
-                    });
+            if (elems.length === LIMIT) {
+                items.push({
+                    kind: 'nav',
+                    title: 'Next',
+                    subtitle: 'Load more items',
+                    route: copyRoute(route, { offset: offset + elems.length })
                 });
+            }
 
-                elems.forEach(function (asset) {
-                    items.push(mapAsset(asset));
-                });
-
-                if (elems.length === LIMIT) {
-                    items.push({
-                        kind: 'nav',
-                        title: 'Next',
-                        subtitle: 'Load more items',
-                        route: copyRoute(route, { offset: offset + elems.length })
-                    });
-                }
-
-                return items;
-            });
+            return items;
         });
     }
 
@@ -1093,7 +1099,7 @@
             kind: isSeries ? 'nav' : 'vod',
             title: title,
             subtitle: subtitle || (asset.assetType || ''),
-            image: asset.image || pickImage(asset.images),
+            image: pickImage(asset.images) || asset.image,
             assetId: asset.assetId,
             videoType: 'VIRTUAL',
             locked: asset.purchased === false,
@@ -1960,6 +1966,7 @@
         style.textContent = [
             '.kyivstar-tv{padding:1.4em 2.8em 3em;color:#fff;width:100%;min-height:100%;box-sizing:border-box;}',
             '.kyivstar-tv__body,.kyivstar-tv .scroll,.kyivstar-tv .scroll__body{width:100%;min-height:20em;box-sizing:border-box;}',
+            '.kyivstar-tv__content{display:block;width:100%;box-sizing:border-box;}',
             '.kyivstar-tv-row{margin:0 0 2.15em;}',
             '.kyivstar-tv-row__title{font-size:1.45em;font-weight:700;line-height:1.15;margin:0 0 .7em;}',
             '.kyivstar-tv-row__body{display:flex;gap:1.1em;overflow:hidden;padding:.15em .2em .45em 0;scroll-behavior:smooth;}',
@@ -1968,7 +1975,7 @@
             '.kyivstar-tv__grid--catalog{grid-template-columns:repeat(auto-fill,minmax(9.5em,1fr));}',
             '.kyivstar-tv-card{flex:0 0 10.8em;min-width:0;outline:0;color:#fff;transition:transform .12s ease,opacity .12s ease;}',
             '.kyivstar-tv-card.focus,.kyivstar-tv-card:focus,.kyivstar-tv-card:hover{transform:translateY(-2px);}',
-            '.kyivstar-tv-card.focus .kyivstar-tv-card__thumb,.kyivstar-tv-card:focus .kyivstar-tv-card__thumb,.kyivstar-tv-card:hover .kyivstar-tv-card__thumb{box-shadow:0 0 0 .28em rgba(255,255,255,.94);}',
+            '.kyivstar-tv-card.focus .kyivstar-tv-card__thumb,.kyivstar-tv-card:focus .kyivstar-tv-card__thumb,.kyivstar-tv-card:hover .kyivstar-tv-card__thumb{box-shadow:0 0 0 .13em rgba(255,255,255,.92),0 .45em 1.1em rgba(0,0,0,.24);}',
             '.kyivstar-tv-card--locked{opacity:.55;}',
             '.kyivstar-tv-card__thumb{height:16em;background:#101820;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.05);transition:box-shadow .12s ease;}',
             '.kyivstar-tv-card__thumb img{width:100%;height:100%;object-fit:cover;display:block;}',
@@ -1979,7 +1986,7 @@
             '.kyivstar-tv-card__subtitle{font-size:.82em;color:rgba(255,255,255,.66);line-height:1.25;margin-top:.38em;min-height:1.05em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}',
             '.kyivstar-tv-card--category{flex-basis:14.4em;background:rgba(255,255,255,.055);border-radius:8px;padding:1.1em 1.2em 1.2em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.055);}',
             '.kyivstar-tv-card--category .kyivstar-tv-card__thumb{height:4.4em;background:transparent;box-shadow:none;border-radius:0;}',
-            '.kyivstar-tv-card--category.focus,.kyivstar-tv-card--category:focus,.kyivstar-tv-card--category:hover{box-shadow:0 0 0 .28em rgba(255,255,255,.94),inset 0 0 0 1px rgba(255,255,255,.18);background:rgba(255,255,255,.1);}',
+            '.kyivstar-tv-card--category.focus,.kyivstar-tv-card--category:focus,.kyivstar-tv-card--category:hover{box-shadow:0 0 0 .13em rgba(255,255,255,.92),inset 0 0 0 1px rgba(255,255,255,.18);background:rgba(255,255,255,.1);}',
             '.kyivstar-tv-card--category.focus .kyivstar-tv-card__thumb,.kyivstar-tv-card--category:focus .kyivstar-tv-card__thumb,.kyivstar-tv-card--category:hover .kyivstar-tv-card__thumb{box-shadow:none;}',
             '.kyivstar-tv-card--category .kyivstar-tv-card__fallback{background:transparent;color:rgba(255,255,255,.9);font-size:1.2em;}',
             '.kyivstar-tv-card--category .kyivstar-tv-card__meta{padding-top:.75em;}',
