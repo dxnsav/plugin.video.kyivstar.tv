@@ -43,7 +43,7 @@
     DEFAULTS[KEYS.cacheKeys] = [];
 
     function boot() {
-        if (!window.Lampa || !window.$) {
+        if (!window.Lampa || !window.$ || !Lampa.Storage) {
             setTimeout(boot, 200);
             return;
         }
@@ -51,10 +51,22 @@
         if (window[PLUGIN_FLAG]) return;
         window[PLUGIN_FLAG] = true;
 
-        ensureDeviceId();
-        addStyles();
-        addComponent();
-        addSettings();
+        try {
+            ensureDeviceId();
+            addStyles();
+            addComponent();
+            addSettings();
+            window.plugin_kyivstar_tv_ready = true;
+            window.KyivstarTVPlugin = {
+                show: showMainMenu,
+                settings: function () {
+                    showSettingsMenu(new KyivstarApi(), showMainMenu);
+                }
+            };
+        } catch (error) {
+            window.plugin_kyivstar_tv_error = error && error.message ? error.message : String(error);
+            console.error(TITLE + ' boot failed:', error);
+        }
 
         if (window.appready) {
             addSideMenuEntry();
@@ -112,37 +124,41 @@
     function addSettings() {
         if (!Lampa.SettingsApi || !Lampa.SettingsApi.addParam) return;
 
-        if (Lampa.SettingsApi.addComponent) {
-            Lampa.SettingsApi.addComponent({
-                component: COMPONENT,
-                name: TITLE,
-                icon: iconSvg()
-            });
+        try {
+            if (Lampa.SettingsApi.addComponent) {
+                Lampa.SettingsApi.addComponent({
+                    component: COMPONENT,
+                    name: TITLE,
+                    icon: iconSvg()
+                });
+            }
+
+            addParam({
+                name: KEYS.loginType,
+                type: 'select',
+                values: {
+                    anonymous: 'Anonymous',
+                    account: 'Personal account',
+                    phone: 'Phone OTP'
+                },
+                default: DEFAULTS[KEYS.loginType]
+            }, 'Login type', 'Anonymous supports free channels. Personal account and phone OTP require an active Kyivstar TV account.');
+
+            addParam({ name: KEYS.username, type: 'input', default: '' }, 'Personal account', 'Used only when login type is Personal account.');
+            addParam({ name: KEYS.password, type: 'input', default: '', password: true }, 'Password', 'Stored locally by Lampa.');
+            addParam({ name: KEYS.phone, type: 'input', default: '' }, 'Phone number', 'Used only when login type is Phone OTP.');
+            addParam({ name: KEYS.otp, type: 'input', default: '' }, 'SMS code', 'If empty, the plugin sends an SMS code and asks you to enter it here.');
+            addParam({
+                name: KEYS.locale,
+                type: 'select',
+                values: { uk_UA: 'Ukrainian', en_US: 'English', ru_RU: 'Russian' },
+                default: DEFAULT_LOCALE
+            }, 'Locale', 'Language sent to Kyivstar TV API.');
+            addParam({ name: KEYS.proxy, type: 'input', default: '' }, 'CORS proxy', 'Optional self-hosted proxy. Use {url} as the encoded target URL placeholder.');
+            addParam({ name: KEYS.appendHeaders, type: 'trigger', default: true }, 'Append stream headers', 'Adds Referer and User-Agent metadata to resolved HLS URLs.');
+        } catch (error) {
+            log('settings registration skipped: ' + error.message);
         }
-
-        addParam({
-            name: KEYS.loginType,
-            type: 'select',
-            values: {
-                anonymous: 'Anonymous',
-                account: 'Personal account',
-                phone: 'Phone OTP'
-            },
-            default: DEFAULTS[KEYS.loginType]
-        }, 'Login type', 'Anonymous supports free channels. Personal account and phone OTP require an active Kyivstar TV account.');
-
-        addParam({ name: KEYS.username, type: 'input', default: '' }, 'Personal account', 'Used only when login type is Personal account.');
-        addParam({ name: KEYS.password, type: 'input', default: '', password: true }, 'Password', 'Stored locally by Lampa.');
-        addParam({ name: KEYS.phone, type: 'input', default: '' }, 'Phone number', 'Used only when login type is Phone OTP.');
-        addParam({ name: KEYS.otp, type: 'input', default: '' }, 'SMS code', 'If empty, the plugin sends an SMS code and asks you to enter it here.');
-        addParam({
-            name: KEYS.locale,
-            type: 'select',
-            values: { uk_UA: 'Ukrainian', en_US: 'English', ru_RU: 'Russian' },
-            default: DEFAULT_LOCALE
-        }, 'Locale', 'Language sent to Kyivstar TV API.');
-        addParam({ name: KEYS.proxy, type: 'input', default: '' }, 'CORS proxy', 'Optional self-hosted proxy. Use {url} as the encoded target URL placeholder.');
-        addParam({ name: KEYS.appendHeaders, type: 'trigger', default: true }, 'Append stream headers', 'Adds Referer and User-Agent metadata to resolved HLS URLs.');
     }
 
     function addParam(param, name, description) {
@@ -176,6 +192,11 @@
     }
 
     function addComponent() {
+        if (!Lampa.Component || !Lampa.Component.add) {
+            setTimeout(addComponent, 500);
+            return;
+        }
+
         Lampa.Component.add(COMPONENT, KyivstarComponent);
     }
 
@@ -530,7 +551,7 @@
         return TITLE;
     }
 
-    async function loadRoute(route, api) {
+    function loadRoute(route, api) {
         if (route.type === 'channels') return loadChannels(route, api);
         if (route.type === 'catalog') return loadCatalog(route, api);
         if (route.type === 'search') return loadSearch(route, api);
@@ -579,122 +600,131 @@
         ]);
     }
 
-    async function loadChannels(route, api) {
+    function loadChannels(route, api) {
         if (!route.groupId) {
-            var groups = await api.getLiveChannelGroups();
-            return groups.map(function (group) {
+            return api.getLiveChannelGroups().then(function (groups) {
+                return groups.map(function (group) {
+                    return {
+                        kind: 'nav',
+                        title: group.name || group.displayName || 'Channels',
+                        subtitle: group.type || '',
+                        image: pickImage(group.images),
+                        route: {
+                            type: 'channels',
+                            groupId: group.assetId,
+                            groupName: group.name || group.displayName || 'Channels'
+                        }
+                    };
+                });
+            });
+        }
+
+        return api.getGroupElements(route.groupId).then(function (channels) {
+            return channels.map(mapChannel);
+        });
+    }
+
+    function loadCatalog(route, api) {
+        var offset = route.offset || 0;
+        var compilationPromise = Promise.resolve([]);
+
+        if (offset === 0 && !route.compilationId) {
+            compilationPromise = api.getCompilations(null).then(function (compilations) {
+                return compilations.filter(function (item) {
+                    return item.compilationElementType !== 'CONTENT_GROUP';
+                });
+            });
+        }
+
+        return compilationPromise.then(function (compilations) {
+            return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, LIMIT).then(function (elems) {
+                var items = [];
+
+                compilations.forEach(function (compilation) {
+                    items.push({
+                        kind: 'nav',
+                        title: compilation.displayName || compilation.name || 'Selection',
+                        subtitle: 'Selection',
+                        image: pickImage(compilation.images),
+                        route: {
+                            type: 'catalog',
+                            compilationId: compilation.id,
+                            compilationName: compilation.displayName || compilation.name || 'Selection',
+                            offset: 0
+                        }
+                    });
+                });
+
+                elems.forEach(function (asset) {
+                    items.push(mapAsset(asset));
+                });
+
+                if (elems.length === LIMIT) {
+                    items.push({
+                        kind: 'nav',
+                        title: 'Next',
+                        subtitle: 'Load more items',
+                        route: copyRoute(route, { offset: offset + elems.length })
+                    });
+                }
+
+                return items;
+            });
+        });
+    }
+
+    function loadSearch(route, api) {
+        return api.search(route.query).then(function (results) {
+            return results.filter(function (asset) {
+                return asset.assetType === 'MOVIE' || asset.assetType === 'SERIES';
+            }).map(mapAsset);
+        });
+    }
+
+    function loadSeriesSeasons(route, api) {
+        return api.getAssetInfo(route.assetId).then(function (info) {
+            var asset = info && info.length ? info[0] : null;
+            var seasons = asset && asset.seasons ? asset.seasons : [];
+
+            return seasons.map(function (season) {
                 return {
                     kind: 'nav',
-                    title: group.name || group.displayName || 'Channels',
-                    subtitle: group.type || '',
-                    image: pickImage(group.images),
+                    title: 'Season ' + season.number,
+                    subtitle: route.title || '',
+                    image: asset ? (pickImage(asset.images) || asset.image) : '',
                     route: {
-                        type: 'channels',
-                        groupId: group.assetId,
-                        groupName: group.name || group.displayName || 'Channels'
+                        type: 'series-episodes',
+                        assetId: route.assetId,
+                        season: season.number,
+                        title: (route.title || 'Series') + ': Season ' + season.number,
+                        offset: 0
                     }
                 };
             });
-        }
-
-        var channels = await api.getGroupElements(route.groupId);
-        return channels.map(mapChannel);
+        });
     }
 
-    async function loadCatalog(route, api) {
+    function loadSeriesEpisodes(route, api) {
         var offset = route.offset || 0;
-        var items = [];
-        var compilations = [];
-        var elems = [];
 
-        if (offset === 0 && !route.compilationId) {
-            compilations = await api.getCompilations(null);
-            compilations = compilations.filter(function (item) {
-                return item.compilationElementType !== 'CONTENT_GROUP';
+        return api.getTvGroup(route.assetId, route.season, offset, LIMIT).then(function (episodes) {
+            var items = episodes.map(function (episode) {
+                var mapped = mapAsset(episode);
+                mapped.kind = 'episode';
+                return mapped;
             });
-        }
 
-        elems = await api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, LIMIT);
+            if (episodes.length === LIMIT) {
+                items.push({
+                    kind: 'nav',
+                    title: 'Next',
+                    subtitle: 'Load more episodes',
+                    route: copyRoute(route, { offset: offset + episodes.length })
+                });
+            }
 
-        compilations.forEach(function (compilation) {
-            items.push({
-                kind: 'nav',
-                title: compilation.displayName || compilation.name || 'Selection',
-                subtitle: 'Selection',
-                image: pickImage(compilation.images),
-                route: {
-                    type: 'catalog',
-                    compilationId: compilation.id,
-                    compilationName: compilation.displayName || compilation.name || 'Selection',
-                    offset: 0
-                }
-            });
+            return items;
         });
-
-        elems.forEach(function (asset) {
-            items.push(mapAsset(asset));
-        });
-
-        if (elems.length === LIMIT) {
-            items.push({
-                kind: 'nav',
-                title: 'Next',
-                subtitle: 'Load more items',
-                route: Object.assign({}, route, { offset: offset + elems.length })
-            });
-        }
-
-        return items;
-    }
-
-    async function loadSearch(route, api) {
-        var results = await api.search(route.query);
-        return results.filter(function (asset) {
-            return asset.assetType === 'MOVIE' || asset.assetType === 'SERIES';
-        }).map(mapAsset);
-    }
-
-    async function loadSeriesSeasons(route, api) {
-        var info = await api.getAssetInfo(route.assetId);
-        var asset = info && info.length ? info[0] : null;
-        var seasons = asset && asset.seasons ? asset.seasons : [];
-
-        return seasons.map(function (season) {
-            return {
-                kind: 'nav',
-                title: 'Season ' + season.number,
-                subtitle: route.title || '',
-                image: pickImage(asset.images) || asset.image,
-                route: {
-                    type: 'series-episodes',
-                    assetId: route.assetId,
-                    season: season.number,
-                    title: (route.title || 'Series') + ': Season ' + season.number,
-                    offset: 0
-                }
-            };
-        });
-    }
-
-    async function loadSeriesEpisodes(route, api) {
-        var offset = route.offset || 0;
-        var episodes = await api.getTvGroup(route.assetId, route.season, offset, LIMIT);
-        var items = episodes.map(function (episode) {
-            var mapped = mapAsset(episode);
-            mapped.kind = 'episode';
-            return mapped;
-        });
-
-        if (episodes.length === LIMIT) {
-            items.push({
-                kind: 'nav',
-                title: 'Next',
-                subtitle: 'Load more episodes',
-                route: Object.assign({}, route, { offset: offset + episodes.length })
-            });
-        }
-
-        return items;
     }
 
     function mapChannel(channel) {
@@ -755,9 +785,13 @@
     function pickImage(images) {
         if (!images || !images.length) return '';
 
-        var preferred = images.find(function (image) {
-            return image.url && image.url.indexOf('2_3_XL') !== -1;
-        });
+        var preferred = null;
+        for (var i = 0; i < images.length; i++) {
+            if (images[i].url && images[i].url.indexOf('2_3_XL') !== -1) {
+                preferred = images[i];
+                break;
+            }
+        }
 
         return (preferred || images[0]).url || '';
     }
@@ -787,28 +821,26 @@
         if (result !== null) done(result);
     }
 
-    async function refreshSession(api) {
-        try {
-            await api.ensureSession(true);
+    function refreshSession(api) {
+        return api.ensureSession(true).then(function () {
             notify('Kyivstar TV session refreshed.');
-        } catch (error) {
+        }).catch(function (error) {
             notify(error.message || String(error));
-        }
+        });
     }
 
-    async function logout(api) {
-        try {
-            await api.logout();
+    function logout(api) {
+        return api.logout().then(function () {
             notify('Kyivstar TV session cleared.');
-        } catch (error) {
+        }).catch(function (error) {
             notify(error.message || String(error));
-        }
+        });
     }
 
-    async function playItem(api, item) {
-        try {
-            notify('Resolving stream...');
-            var stream = await api.getStreamUrl(item.assetId, item.videoType);
+    function playItem(api, item) {
+        notify('Resolving stream...');
+
+        return api.getStreamUrl(item.assetId, item.videoType).then(function (stream) {
             var url = decorateStreamUrl(stream.url);
 
             Lampa.Player.play({
@@ -817,9 +849,9 @@
                 poster: item.image || '',
                 timeline: false
             });
-        } catch (error) {
+        }).catch(function (error) {
             notify(error.message || String(error));
-        }
+        });
     }
 
     function decorateStreamUrl(url) {
@@ -849,70 +881,74 @@
         return applyProxy(API_BASE + path);
     };
 
-    KyivstarApi.prototype.request = async function (path, options) {
+    KyivstarApi.prototype.request = function (path, options) {
+        var self = this;
         var retries = options && options.retries !== undefined ? options.retries : 1;
+        var requestOptions = merge({
+            headers: this.headers()
+        }, options || {});
 
-        for (var attempt = 0; attempt <= retries; attempt++) {
-            try {
-                return await request(this.network, this.url(path), Object.assign({
-                    headers: this.headers()
-                }, options || {}));
-            } catch (error) {
+        function run(attempt) {
+            return request(self.network, self.url(path), requestOptions).catch(function (error) {
                 if (error.status === 429 && attempt < retries) {
-                    await delay(10000);
-                    continue;
+                    return delay(10000).then(function () {
+                        return run(attempt + 1);
+                    });
                 }
 
                 throw error;
-            }
+            });
         }
 
-        return null;
+        return run(0);
     };
 
-    KyivstarApi.prototype.withSession = async function (handler, retry) {
-        var session = await this.ensureSession(false);
+    KyivstarApi.prototype.withSession = function (handler, retry) {
+        var self = this;
 
-        try {
-            return await handler(session);
-        } catch (error) {
-            if (error.status === 401 && retry !== false) {
-                session = await this.ensureSession(true);
-                return handler(session);
-            }
+        return this.ensureSession(false).then(function (session) {
+            return Promise.resolve(handler(session)).catch(function (error) {
+                if (error.status === 401 && retry !== false) {
+                    return self.ensureSession(true).then(function (newSession) {
+                        return handler(newSession);
+                    });
+                }
 
-            throw error;
-        }
+                throw error;
+            });
+        });
     };
 
-    KyivstarApi.prototype.ensureSession = async function (force) {
+    KyivstarApi.prototype.ensureSession = function (force) {
         var current = setting(KEYS.session);
-        if (!force && current && current.sessionId && current.userId) return current;
+        if (!force && current && current.sessionId && current.userId) return Promise.resolve(current);
 
         var loginType = setting(KEYS.loginType);
-        var profile;
+        var loginPromise;
 
         if (loginType === 'account') {
-            profile = await this.loginAccount();
+            loginPromise = this.loginAccount();
         } else if (loginType === 'phone') {
-            profile = await this.loginPhone();
+            loginPromise = this.loginPhone();
         } else {
-            profile = await this.loginAnonymous();
+            loginPromise = this.loginAnonymous();
         }
 
-        if (!profile || !profile.userId || !profile.sessionId) {
-            throw new Error('Kyivstar TV login failed.');
-        }
+        return loginPromise.then(function (profile) {
+            if (!profile || !profile.userId || !profile.sessionId) {
+                throw new Error('Kyivstar TV login failed.');
+            }
 
-        saveSetting(KEYS.session, {
-            userId: profile.userId,
-            sessionId: profile.sessionId
+            saveSetting(KEYS.session, {
+                userId: profile.userId,
+                sessionId: profile.sessionId
+            });
+
+            return setting(KEYS.session);
         });
-
-        return setting(KEYS.session);
     };
 
-    KyivstarApi.prototype.loginAnonymous = async function () {
+    KyivstarApi.prototype.loginAnonymous = function () {
         return this.request('authentication/login', {
             method: 'POST',
             form: {
@@ -922,54 +958,61 @@
         });
     };
 
-    KyivstarApi.prototype.loginAccount = async function () {
+    KyivstarApi.prototype.loginAccount = function () {
+        var self = this;
         var username = setting(KEYS.username);
         var password = setting(KEYS.password);
 
         if (!username || !password) {
-            throw new Error('Set personal account and password in Kyivstar TV settings.');
+            return Promise.reject(new Error('Set personal account and password in Kyivstar TV settings.'));
         }
 
-        var anonymous = await this.loginAnonymous();
-        return this.request('authentication/login/v3;jsessionid=' + encodeURIComponent(anonymous.sessionId), {
-            method: 'POST',
-            form: {
-                username: AUTH_REALM + '\\' + username,
-                password: password
-            }
+        return this.loginAnonymous().then(function (anonymous) {
+            return self.request('authentication/login/v3;jsessionid=' + encodeURIComponent(anonymous.sessionId), {
+                method: 'POST',
+                form: {
+                    username: AUTH_REALM + '\\' + username,
+                    password: password
+                }
+            });
         });
     };
 
-    KyivstarApi.prototype.loginPhone = async function () {
+    KyivstarApi.prototype.loginPhone = function () {
+        var self = this;
         var phone = setting(KEYS.phone);
         var otp = setting(KEYS.otp);
         var pending = setting(KEYS.pendingPhoneSession);
 
         if (!phone) {
-            throw new Error('Set phone number in Kyivstar TV settings.');
+            return Promise.reject(new Error('Set phone number in Kyivstar TV settings.'));
         }
 
-        if (!pending || !pending.sessionId) {
-            pending = await this.loginAnonymous();
-            saveSetting(KEYS.pendingPhoneSession, pending);
-        }
-
-        if (!otp) {
-            await this.sendOtp(pending.sessionId, phone);
-            throw new Error('SMS code sent. Enter it in Kyivstar TV settings, then refresh the session.');
-        }
-
-        var profile = await this.request('authentication/login/v3;jsessionid=' + encodeURIComponent(pending.sessionId), {
-            method: 'POST',
-            form: {
-                username: AUTH_REALM + '\\' + phone,
-                otp: otp
-            }
+        var pendingPromise = pending && pending.sessionId ? Promise.resolve(pending) : this.loginAnonymous().then(function (anonymous) {
+            saveSetting(KEYS.pendingPhoneSession, anonymous);
+            return anonymous;
         });
 
-        saveSetting(KEYS.otp, '');
-        saveSetting(KEYS.pendingPhoneSession, null);
-        return profile;
+        return pendingPromise.then(function (phoneSession) {
+            if (!otp) {
+                return self.sendOtp(phoneSession.sessionId, phone).then(function () {
+                    throw new Error('SMS code sent. Enter it in Kyivstar TV settings, then refresh the session.');
+                });
+            }
+
+            return self.request('authentication/login/v3;jsessionid=' + encodeURIComponent(phoneSession.sessionId), {
+                method: 'POST',
+                form: {
+                    username: AUTH_REALM + '\\' + phone,
+                    otp: otp
+                }
+            }).then(function (profile) {
+                saveSetting(KEYS.otp, '');
+                saveSetting(KEYS.pendingPhoneSession, null);
+                return profile;
+            });
+
+        });
     };
 
     KyivstarApi.prototype.sendOtp = function (sessionId, phone) {
@@ -984,21 +1027,21 @@
         });
     };
 
-    KyivstarApi.prototype.logout = async function () {
+    KyivstarApi.prototype.logout = function () {
         var session = setting(KEYS.session);
         saveSetting(KEYS.session, null);
         saveSetting(KEYS.pendingPhoneSession, null);
         this.clearCache();
 
         if (session && session.userId && session.userId !== 'anonymous') {
-            try {
-                await this.request('authentication/logout;jsessionid=' + encodeURIComponent(session.sessionId) + '?sessionExpired=false', {
-                    dataType: 'text'
-                });
-            } catch (error) {
+            return this.request('authentication/logout;jsessionid=' + encodeURIComponent(session.sessionId) + '?sessionExpired=false', {
+                dataType: 'text'
+            }).catch(function (error) {
                 log('logout request failed: ' + error.message);
-            }
+            });
         }
+
+        return Promise.resolve();
     };
 
     KyivstarApi.prototype.getLiveChannelGroups = function () {
@@ -1105,17 +1148,18 @@
         });
     };
 
-    KyivstarApi.prototype.cached = async function (name, ttl, loader) {
+    KyivstarApi.prototype.cached = function (name, ttl, loader) {
         var key = 'kyivstar_cache_' + name;
         var cached = Lampa.Storage.get(key, null);
         var now = Date.now();
 
-        if (cached && cached.time && now - cached.time < ttl) return cached.value;
+        if (cached && cached.time && now - cached.time < ttl) return Promise.resolve(cached.value);
 
-        var value = await loader();
-        Lampa.Storage.set(key, { time: now, value: value });
-        rememberCacheKey(key);
-        return value;
+        return Promise.resolve(loader()).then(function (value) {
+            Lampa.Storage.set(key, { time: now, value: value });
+            rememberCacheKey(key);
+            return value;
+        });
     };
 
     KyivstarApi.prototype.clearCache = function () {
@@ -1136,7 +1180,7 @@
         options = options || {};
 
         var method = options.method || 'GET';
-        var headers = Object.assign({}, options.headers || {});
+        var headers = merge({}, options.headers || {});
         var dataType = options.dataType || 'json';
         var postData = false;
 
@@ -1181,35 +1225,38 @@
         });
     }
 
-    async function fetchRequest(url, method, headers, postData, dataType) {
+    function fetchRequest(url, method, headers, postData, dataType) {
         var body = null;
 
         if (postData && typeof postData === 'object') {
-            body = new URLSearchParams(postData).toString();
+            body = encodeForm(postData);
             headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
         } else if (postData) {
             body = postData;
         }
 
-        var response = await fetch(url, {
+        return fetch(url, {
             method: method,
             headers: headers,
             body: body
-        });
+        }).then(function (response) {
+            if (!response.ok) {
+                var error = new Error('HTTP ' + response.status);
+                error.status = response.status;
 
-        if (!response.ok) {
-            var error = new Error('HTTP ' + response.status);
-            error.status = response.status;
-            try {
-                error.body = await response.json();
-            } catch (jsonError) {
-                error.body = await response.text();
+                return response.text().then(function (text) {
+                    try {
+                        error.body = JSON.parse(text);
+                    } catch (jsonError) {
+                        error.body = text;
+                    }
+                    throw error;
+                });
             }
-            throw error;
-        }
 
-        if (dataType === 'text') return response.text();
-        return response.json();
+            if (dataType === 'text') return response.text();
+            return response.json();
+        });
     }
 
     function normalizeRequestError(error) {
@@ -1244,6 +1291,35 @@
         return new Promise(function (resolve) {
             setTimeout(resolve, ms);
         });
+    }
+
+    function merge(target, source) {
+        target = target || {};
+        source = source || {};
+
+        for (var key in source) {
+            if (Object.prototype.hasOwnProperty.call(source, key)) {
+                target[key] = source[key];
+            }
+        }
+
+        return target;
+    }
+
+    function copyRoute(route, patch) {
+        return merge(merge({}, route), patch);
+    }
+
+    function encodeForm(data) {
+        var parts = [];
+
+        for (var key in data) {
+            if (Object.prototype.hasOwnProperty.call(data, key)) {
+                parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
+            }
+        }
+
+        return parts.join('&');
     }
 
     function iconSvg() {
