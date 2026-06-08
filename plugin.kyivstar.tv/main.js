@@ -59,7 +59,6 @@
             ensureDeviceId();
             addStyles();
             addComponent();
-            addSettings();
             window.plugin_kyivstar_tv_ready = true;
             window.KyivstarTVPlugin = {
                 show: showMainMenu,
@@ -249,40 +248,7 @@
     }
 
     function showMainMenu() {
-        if (!Lampa.Select || !Lampa.Select.show) {
-            pushRoute({ type: 'root' }, TITLE);
-            return;
-        }
-
-        Lampa.Select.show({
-            title: TITLE,
-            items: [
-                { title: 'Live TV', action: 'channels' },
-                { title: 'Videos', action: 'catalog' },
-                { title: 'Search', action: 'search' },
-                { title: 'Settings', action: 'settings' },
-                { title: 'Refresh session', action: 'session' },
-                { title: 'Diagnostics', action: 'diagnostics' }
-            ],
-            onSelect: function (item) {
-                if (item.action === 'channels') pushRoute({ type: 'channels' }, 'Live TV');
-                else if (item.action === 'catalog') pushRoute({ type: 'catalog', offset: 0 }, 'Videos');
-                else if (item.action === 'search') {
-                    askText('Search Kyivstar TV', '', function (query) {
-                        if (query) pushRoute({ type: 'search', query: query }, 'Search: ' + query);
-                    });
-                } else if (item.action === 'settings') {
-                    showSettingsMenu(new KyivstarApi(), showMainMenu);
-                } else if (item.action === 'session') {
-                    refreshSession(new KyivstarApi());
-                } else if (item.action === 'diagnostics') {
-                    showDiagnosticsMenu(showMainMenu);
-                }
-            },
-            onBack: function () {
-                if (Lampa.Controller && Lampa.Controller.toggle) Lampa.Controller.toggle('content');
-            }
-        });
+        pushRoute({ type: 'root' }, TITLE);
     }
 
     function showSettingsMenu(api, onBack) {
@@ -586,8 +552,10 @@
             }
 
             var grid = $('<div class="kyivstar-tv__grid"></div>');
+            grid.addClass(route.type === 'root' ? 'kyivstar-tv__grid--root' : 'kyivstar-tv__grid--catalog');
             items.forEach(function (item) {
                 var card = renderCard(item);
+                if (route.type === 'root') card.addClass('kyivstar-tv-card--root');
                 grid.append(card);
                 activeItems.push(card);
             });
@@ -643,7 +611,11 @@
                 logout(api);
             } else if (item.kind === 'settings') {
                 showSettingsMenu(api, function () {
-                    pushRoute({ type: 'root' }, TITLE);
+                    focusFirst();
+                });
+            } else if (item.kind === 'diagnostics') {
+                showDiagnosticsMenu(function () {
+                    focusFirst();
                 });
             } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
                 playItem(api, item);
@@ -688,7 +660,7 @@
     function routeTitle(route) {
         if (route.type === 'channels') return route.groupName || 'Live TV';
         if (route.type === 'catalog') return route.compilationName || 'Videos';
-        if (route.type === 'search') return 'Search';
+        if (route.type === 'search') return route.query ? 'Search: ' + route.query : 'Search';
         if (route.type === 'series-seasons') return route.title || 'Series';
         if (route.type === 'series-episodes') return route.title || 'Episodes';
         return TITLE;
@@ -723,12 +695,17 @@
             {
                 kind: 'search',
                 title: 'Search',
-                subtitle: 'Search movies and series'
+                subtitle: 'Search Kyivstar TV'
             },
             {
                 kind: 'settings',
                 title: 'Settings',
                 subtitle: 'Login, locale, headers, proxy'
+            },
+            {
+                kind: 'diagnostics',
+                title: 'Diagnostics',
+                subtitle: 'Request logs and plugin state'
             },
             {
                 kind: 'session',
@@ -818,9 +795,14 @@
 
     function loadSearch(route, api) {
         return api.search(route.query).then(function (results) {
-            return results.filter(function (asset) {
-                return asset.assetType === 'MOVIE' || asset.assetType === 'SERIES';
-            }).map(mapAsset);
+            var items = [];
+
+            results.forEach(function (asset) {
+                var item = mapSearchResult(asset);
+                if (item) items.push(item);
+            });
+
+            return items;
         });
     }
 
@@ -909,6 +891,19 @@
                 title: title
             } : null
         };
+    }
+
+    function mapSearchResult(asset) {
+        var type = asset && (asset.assetType || asset.contentType || asset.type);
+        var typeValue = type && type.value ? type.value : type;
+
+        if (!asset) return null;
+        if (typeValue === 'MOVIE' || typeValue === 'SERIES') return mapAsset(asset);
+        if (typeValue === 'LIVE_CHANNEL' || typeValue === 'IP' || asset.channelNumber || asset.logicalChannelNumber) return mapChannel(asset);
+
+        if (asset.assetId && (asset.name || asset.displayName || asset.title)) return mapAsset(asset);
+
+        return null;
     }
 
     function normalizeYear(value) {
@@ -1723,16 +1718,20 @@
         var style = document.createElement('style');
         style.id = 'kyivstar-tv-styles';
         style.textContent = [
-            '.kyivstar-tv{padding:2.2em 3em 3em;color:#fff;min-height:100%;box-sizing:border-box;}',
+            '.kyivstar-tv{padding:2.2em 3em 3em;color:#fff;width:100%;min-height:100%;box-sizing:border-box;}',
             '.kyivstar-tv__header{display:flex;align-items:flex-end;gap:1em;margin-bottom:1.4em;}',
             '.kyivstar-tv__title{font-size:2.2em;font-weight:700;line-height:1.05;}',
             '.kyivstar-tv__subtitle{font-size:1em;color:rgba(255,255,255,.62);padding-bottom:.2em;}',
-            '.kyivstar-tv__body{min-height:20em;}',
-            '.kyivstar-tv__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(11.5em,1fr));gap:1em;align-items:stretch;}',
+            '.kyivstar-tv__body,.kyivstar-tv .scroll,.kyivstar-tv .scroll__body{width:100%;min-height:20em;box-sizing:border-box;}',
+            '.kyivstar-tv__grid{display:grid;gap:1em;align-items:stretch;width:100%;max-width:86em;box-sizing:border-box;}',
+            '.kyivstar-tv__grid--root{grid-template-columns:repeat(auto-fill,minmax(12em,16em));}',
+            '.kyivstar-tv__grid--catalog{grid-template-columns:repeat(auto-fill,minmax(9.5em,1fr));}',
             '.kyivstar-tv-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden;min-height:17em;outline:0;transition:transform .12s ease,border-color .12s ease,background .12s ease;}',
+            '.kyivstar-tv-card--root{min-height:11.5em;}',
             '.kyivstar-tv-card.focus,.kyivstar-tv-card:focus,.kyivstar-tv-card:hover{transform:translateY(-2px);border-color:#ffd33d;background:rgba(255,255,255,.14);}',
             '.kyivstar-tv-card--locked{opacity:.55;}',
             '.kyivstar-tv-card__thumb{height:12.5em;background:#101820;display:flex;align-items:center;justify-content:center;overflow:hidden;}',
+            '.kyivstar-tv-card--root .kyivstar-tv-card__thumb{height:6.4em;}',
             '.kyivstar-tv-card__thumb img{width:100%;height:100%;object-fit:cover;display:block;}',
             '.kyivstar-tv-card__fallback{width:4em;height:4em;border-radius:8px;background:#ffd33d;color:#101820;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.3em;}',
             '.kyivstar-tv-card__meta{padding:.8em .85em 1em;}',
@@ -1740,7 +1739,7 @@
             '.kyivstar-tv-card__subtitle{font-size:.82em;color:rgba(255,255,255,.62);line-height:1.25;margin-top:.35em;min-height:2.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}',
             '.kyivstar-tv__message{padding:1em 1.2em;border-radius:8px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);display:inline-block;}',
             '.kyivstar-tv__message--error{border:1px solid rgba(255,86,86,.7);color:#ffb8b8;}',
-            '@media(max-width:720px){.kyivstar-tv{padding:1.2em}.kyivstar-tv__header{display:block}.kyivstar-tv__title{font-size:1.6em}.kyivstar-tv__grid{grid-template-columns:repeat(auto-fill,minmax(9.5em,1fr));gap:.75em}.kyivstar-tv-card{min-height:14.5em}.kyivstar-tv-card__thumb{height:10em}}'
+            '@media(max-width:720px){.kyivstar-tv{padding:1.2em}.kyivstar-tv__header{display:block}.kyivstar-tv__title{font-size:1.6em}.kyivstar-tv__grid{grid-template-columns:repeat(auto-fill,minmax(8.8em,1fr));gap:.75em}.kyivstar-tv-card{min-height:14.5em}.kyivstar-tv-card--root{min-height:10.5em}.kyivstar-tv-card__thumb{height:10em}.kyivstar-tv-card--root .kyivstar-tv-card__thumb{height:5.6em}}'
         ].join('');
         document.head.appendChild(style);
     }
