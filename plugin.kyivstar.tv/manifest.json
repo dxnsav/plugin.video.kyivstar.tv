@@ -1,0 +1,54 @@
+{
+  "id": "plugin.video.kyivstar.tv",
+  "version": "1.0.0",
+  "name": "Kyivstar TV",
+  "description": "Lampa plugin for Kyivstar TV live channels and VOD using the Vidmind API flow from the Kodi addon.",
+  "author": "TVHomeNetwork / Codex port",
+  "main": "main.js",
+  "lampa": ">=0.9.0",
+  "icon": "https://tv.kyivstar.ua/favicon.ico",
+  "settings": [
+    {
+      "type": "select",
+      "name": "kyivstar_login_type",
+      "title": "Login type",
+      "default": "anonymous",
+      "values": {
+        "anonymous": "Anonymous",
+        "account": "Personal account",
+        "phone": "Phone OTP"
+      }
+    },
+    {
+      "type": "text",
+      "name": "kyivstar_username",
+      "title": "Personal account",
+      "default": ""
+    },
+    {
+      "type": "text",
+      "name": "kyivstar_password",
+      "title": "Password",
+      "password": true,
+      "default": ""
+    },
+    {
+      "type": "text",
+      "name": "kyivstar_phone",
+      "title": "Phone number",
+      "default": ""
+    },
+    {
+      "type": "text",
+      "name": "kyivstar_otp",
+      "title": "SMS code",
+      "default": ""
+    },
+    {
+      "type": "text",
+      "name": "kyivstar_proxy",
+      "title": "Optional self-hosted CORS proxy",
+      "default": ""
+    }
+  ]
+}
