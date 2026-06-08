@@ -1,7 +1,8 @@
 (function () {
     'use strict';
 
-    var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded';
+    var PLUGIN_BUILD = '2026-06-09-search-settings-home';
+    var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
     var TITLE = 'Kyivstar TV';
     var API_BASE = 'https://clients.production.vidmind.com/vidmind-stb-ws/';
@@ -14,6 +15,8 @@
     var CACHE_CATALOG_MS = 60 * 60 * 1000;
     var MAX_LOGS = 120;
     var requestCounter = 0;
+    var settingsAdded = false;
+    var searchSourceAdded = false;
 
     var KEYS = {
         loginType: 'kyivstar_login_type',
@@ -59,6 +62,8 @@
             ensureDeviceId();
             addStyles();
             addComponent();
+            addSettings();
+            addSearchSource();
             window.plugin_kyivstar_tv_ready = true;
             window.KyivstarTVPlugin = {
                 show: showMainMenu,
@@ -84,11 +89,15 @@
 
         if (window.appready) {
             addSideMenuEntry();
+            addSettings();
+            addSearchSource();
             initNotice();
         } else if (Lampa.Listener && Lampa.Listener.follow) {
             Lampa.Listener.follow('app', function (event) {
                 if (event.type === 'ready') {
                     addSideMenuEntry();
+                    addSettings();
+                    addSearchSource();
                     initNotice();
                 }
             });
@@ -160,9 +169,17 @@
     }
 
     function addSettings() {
-        if (!Lampa.SettingsApi || !Lampa.SettingsApi.addParam) return;
+        if (settingsAdded) return;
+
+        if (!Lampa.SettingsApi || !Lampa.SettingsApi.addParam) {
+            setTimeout(addSettings, 500);
+            return;
+        }
 
         try {
+            if (Lampa.SettingsApi.removeComponent) Lampa.SettingsApi.removeComponent(COMPONENT);
+            else if (Lampa.SettingsApi.removeParams) Lampa.SettingsApi.removeParams(COMPONENT);
+
             if (Lampa.SettingsApi.addComponent) {
                 Lampa.SettingsApi.addComponent({
                     component: COMPONENT,
@@ -182,32 +199,65 @@
                 default: DEFAULTS[KEYS.loginType]
             }, 'Login type', 'Anonymous supports free channels. Personal account and phone OTP require an active Kyivstar TV account.');
 
-            addParam({ name: KEYS.username, type: 'input', default: '' }, 'Personal account', 'Used only when login type is Personal account.');
-            addParam({ name: KEYS.password, type: 'input', default: '', password: true }, 'Password', 'Stored locally by Lampa.');
-            addParam({ name: KEYS.phone, type: 'input', default: '' }, 'Phone number', 'Used only when login type is Phone OTP.');
-            addParam({ name: KEYS.otp, type: 'input', default: '' }, 'SMS code', 'If empty, the plugin sends an SMS code and asks you to enter it here.');
+            addParam({ name: KEYS.username, type: 'input', default: '' }, 'Personal account', 'Used only when login type is Personal account.', clearSession);
+            addParam({ name: KEYS.password, type: 'input', default: '', password: true }, 'Password', 'Stored locally by Lampa.', clearSession);
+            addParam({ name: KEYS.phone, type: 'input', default: '' }, 'Phone number', 'Used only when login type is Phone OTP.', clearSession);
+            addParam({ name: KEYS.otp, type: 'input', default: '' }, 'SMS code', 'Enter the SMS code here, then use Refresh session.');
             addParam({
                 name: KEYS.locale,
                 type: 'select',
                 values: { uk_UA: 'Ukrainian', en_US: 'English', ru_RU: 'Russian' },
                 default: DEFAULT_LOCALE
-            }, 'Locale', 'Language sent to Kyivstar TV API.');
+            }, 'Locale', 'Language sent to Kyivstar TV API.', clearSession);
             addParam({ name: KEYS.proxy, type: 'input', default: '' }, 'CORS proxy', 'Optional self-hosted proxy. Use {url} as the encoded target URL placeholder.');
             addParam({ name: KEYS.appendHeaders, type: 'trigger', default: true }, 'Append stream headers', 'Adds Referer and User-Agent metadata to resolved HLS URLs.');
+            addParam({ name: 'kyivstar_send_sms', type: 'button' }, 'Send SMS code now', 'Requests a phone OTP for the saved phone number.', function () {
+                sendSmsCode(new KyivstarApi());
+            });
+            addParam({ name: 'kyivstar_refresh_session', type: 'button' }, 'Refresh session', 'Re-login with the selected login type.', function () {
+                refreshSession(new KyivstarApi());
+            });
+            addParam({ name: 'kyivstar_diagnostics', type: 'button' }, 'Diagnostics / logs', 'Open Kyivstar TV request logs.', function () {
+                showDiagnosticsMenu(settingsBack);
+            });
+            addParam({ name: 'kyivstar_clear_phone', type: 'button' }, 'Clear phone OTP state', 'Clears pending anonymous phone session and SMS code.', function () {
+                saveSetting(KEYS.pendingPhoneSession, null);
+                saveSetting(KEYS.otp, '');
+                debugLog('info', 'auth:phone:state-cleared', {});
+                notify('Kyivstar TV phone OTP state cleared.');
+            });
+            addParam({ name: 'kyivstar_logout', type: 'button' }, 'Log out / clear session', 'Clears local Kyivstar TV session and cache.', function () {
+                logout(new KyivstarApi());
+            });
+
+            settingsAdded = true;
+            debugLog('info', 'settings:added', {});
         } catch (error) {
             log('settings registration skipped: ' + error.message);
         }
     }
 
-    function addParam(param, name, description) {
-        Lampa.SettingsApi.addParam({
+    function addParam(param, name, description, onChange) {
+        var data = {
             component: COMPONENT,
             param: param,
             field: {
                 name: name,
                 description: description || ''
             }
-        });
+        };
+
+        if (typeof onChange === 'function') data.onChange = onChange;
+
+        Lampa.SettingsApi.addParam(data);
+    }
+
+    function clearSession() {
+        saveSetting(KEYS.session, null);
+    }
+
+    function settingsBack() {
+        if (Lampa.Controller && Lampa.Controller.toggle) Lampa.Controller.toggle('settings');
     }
 
     function addSideMenuEntry() {
@@ -230,6 +280,124 @@
         debugLog('info', 'menu:added', {});
     }
 
+    function addSearchSource() {
+        if (searchSourceAdded) return;
+
+        if (!Lampa.Search || !Lampa.Search.addSource) {
+            setTimeout(addSearchSource, 500);
+            return;
+        }
+
+        if (window.__kyivstar_tv_search_source && Lampa.Search.removeSource) {
+            Lampa.Search.removeSource(window.__kyivstar_tv_search_source);
+        }
+
+        window.__kyivstar_tv_search_source = createSearchSource();
+        Lampa.Search.addSource(window.__kyivstar_tv_search_source);
+        searchSourceAdded = true;
+        debugLog('info', 'search:source-added', {});
+    }
+
+    function createSearchSource() {
+        var api = new KyivstarApi();
+
+        return {
+            title: TITLE,
+            params: {
+                lazy: true,
+                save: false,
+                start_typing: 'search_start_typing',
+                nofound: 'search_nofound'
+            },
+            search: function (params, done) {
+                var query = decodeQuery(params && params.query);
+
+                debugLog('info', 'search:native:start', { query: query });
+
+                api.search(query).then(function (results) {
+                    var rows = buildNativeSearchRows(results || []);
+                    debugLog('info', 'search:native:ok', {
+                        query: query,
+                        rows: rows.length
+                    });
+                    done(rows);
+                }).catch(function (error) {
+                    debugLog('error', 'search:native:error', {
+                        query: query,
+                        error: error.message || String(error),
+                        status: error.status || error.decode_code || ''
+                    });
+                    done([]);
+                });
+            },
+            onSelect: function (params, close) {
+                var item = params && params.element ? params.element._kyivstar : null;
+                if (typeof close === 'function') close();
+                openKyivstarItem(item);
+            },
+            onCancel: function () {
+                api.clear();
+            }
+        };
+    }
+
+    function buildNativeSearchRows(results) {
+        var videos = [];
+        var channels = [];
+
+        results.forEach(function (asset) {
+            var item = mapSearchResult(asset);
+            var card;
+
+            if (!item) return;
+
+            card = mapNativeCard(item);
+            if (item.kind === 'channel') channels.push(card);
+            else videos.push(card);
+        });
+
+        return buildRows([
+            { title: 'Videos', type: 'movie', results: videos },
+            { title: 'Live TV', type: 'channel', results: channels }
+        ]);
+    }
+
+    function mapNativeCard(item) {
+        var card = {
+            id: item.assetId || item.title,
+            title: item.title,
+            original_title: item.title,
+            release_date: subtitleYear(item.subtitle),
+            poster: item.image || '',
+            img: item.image || '',
+            source: COMPONENT,
+            _kyivstar: item
+        };
+
+        if (item.kind === 'nav') {
+            card.name = item.title;
+            card.original_name = item.title;
+            card.first_air_date = card.release_date;
+        }
+
+        return card;
+    }
+
+    function openKyivstarItem(item) {
+        if (!item) return;
+
+        if (item.locked) {
+            notify('This item is not available for the current account.');
+            return;
+        }
+
+        if (item.kind === 'nav' && item.route) {
+            pushRoute(item.route, item.title);
+        } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
+            playItem(new KyivstarApi(), item);
+        }
+    }
+
     function addComponent() {
         if (!Lampa.Component || !Lampa.Component.add) {
             setTimeout(addComponent, 500);
@@ -248,7 +416,7 @@
     }
 
     function showMainMenu() {
-        pushRoute({ type: 'root' }, TITLE);
+        pushRoute({ type: 'home' }, TITLE);
     }
 
     function showSettingsMenu(api, onBack) {
@@ -468,17 +636,11 @@
         var route = object.route || { type: 'root' };
         var api = new KyivstarApi();
         var html = $('<div class="kyivstar-tv"></div>');
-        var header = $('<div class="kyivstar-tv__header"></div>');
-        var heading = $('<div class="kyivstar-tv__title"></div>').text(routeTitle(route));
-        var subheading = $('<div class="kyivstar-tv__subtitle"></div>');
         var body = $('<div class="kyivstar-tv__body"></div>');
         var scroll = Lampa.Scroll ? new Lampa.Scroll({ mask: true, over: true }) : null;
         var scrollBody = scroll ? scroll.render(true) : body;
         var activeItems = [];
 
-        header.append(heading);
-        header.append(subheading);
-        html.append(header);
         if (scroll) {
             html.append(scrollBody);
         } else {
@@ -529,7 +691,6 @@
         }
 
         function setSubtitle(text) {
-            subheading.text(text || '');
         }
 
         function renderMessage(text) {
@@ -546,6 +707,11 @@
 
         function renderItems(items) {
             clearBody();
+            if (items && items.rows) {
+                renderRows(items.rows);
+                return;
+            }
+
             if (!items || !items.length) {
                 renderMessage('Nothing found');
                 return;
@@ -564,6 +730,33 @@
             focusFirst();
         }
 
+        function renderRows(rows) {
+            if (!rows || !rows.length) {
+                renderMessage('Nothing found');
+                return;
+            }
+
+            rows.forEach(function (row) {
+                var rowElement = $('<div class="kyivstar-tv-row"></div>');
+                var title = $('<div class="kyivstar-tv-row__title"></div>').text(row.title || '');
+                var body = $('<div class="kyivstar-tv-row__body"></div>');
+
+                rowElement.append(title);
+                rowElement.append(body);
+
+                (row.items || []).forEach(function (item) {
+                    var card = renderCard(item);
+                    card.addClass(item.kind === 'nav' ? 'kyivstar-tv-card--category' : 'kyivstar-tv-card--poster');
+                    body.append(card);
+                    activeItems.push(card);
+                });
+
+                target().append(rowElement);
+            });
+
+            focusFirst();
+        }
+
         function renderCard(item) {
             var card = $('<div class="kyivstar-tv-card selector" tabindex="0"></div>');
             var thumb = $('<div class="kyivstar-tv-card__thumb"></div>');
@@ -573,6 +766,8 @@
 
             if (item.image) {
                 thumb.append($('<img alt="">').attr('src', item.image));
+            } else if (item.kind === 'nav') {
+                thumb.append($('<div class="kyivstar-tv-card__fallback kyivstar-tv-card__fallback--icon"></div>').html(item.icon || iconSvg()));
             } else {
                 thumb.append($('<div class="kyivstar-tv-card__fallback"></div>').text((item.title || 'K').slice(0, 2).toUpperCase()));
             }
@@ -587,6 +782,7 @@
                 activate(item);
             });
             card.on('hover:focus focus', function () {
+                scrollRowToCard(card);
                 if (scroll) scroll.update(card);
             });
 
@@ -631,6 +827,18 @@
             return scroll ? scrollBody : body;
         }
 
+        function scrollRowToCard(card) {
+            var row = card.closest('.kyivstar-tv-row__body');
+            var left;
+
+            if (!row.length) return;
+
+            left = card.position().left + row.scrollLeft();
+            row.stop(true).animate({
+                scrollLeft: Math.max(0, left - row.width() * 0.18)
+            }, 120);
+        }
+
         function focusFirst() {
             if (!Lampa.Controller || !activeItems.length) return;
 
@@ -667,57 +875,59 @@
     }
 
     function loadRoute(route, api) {
+        if (route.type === 'home' || route.type === 'root') return loadHome(api);
         if (route.type === 'channels') return loadChannels(route, api);
         if (route.type === 'catalog') return loadCatalog(route, api);
         if (route.type === 'search') return loadSearch(route, api);
         if (route.type === 'series-seasons') return loadSeriesSeasons(route, api);
         if (route.type === 'series-episodes') return loadSeriesEpisodes(route, api);
-        return loadRoot();
+        return loadHome(api);
     }
 
-    function loadRoot() {
-        var session = setting(KEYS.session);
-        var user = session && session.userId ? session.userId : 'not signed in';
-
-        return Promise.resolve([
-            {
+    function loadHome(api) {
+        return Promise.all([
+            api.getCompilations(null).catch(function (error) {
+                debugLog('warn', 'home:compilations:error', { error: error.message || String(error) });
+                return [];
+            }),
+            api.getContentAreaElements(null, [], null, 0, LIMIT).catch(function (error) {
+                debugLog('warn', 'home:videos:error', { error: error.message || String(error) });
+                return [];
+            })
+        ]).then(function (data) {
+            var compilations = data[0] || [];
+            var videos = data[1] || [];
+            var categories = [{
                 kind: 'nav',
                 title: 'Live TV',
-                subtitle: 'Purchased and free channels',
+                subtitle: 'Channels',
+                image: '',
                 route: { type: 'channels' }
-            },
-            {
-                kind: 'nav',
-                title: 'Videos',
-                subtitle: 'Movies, series, shows and collections',
-                route: { type: 'catalog', offset: 0 }
-            },
-            {
-                kind: 'search',
-                title: 'Search',
-                subtitle: 'Search Kyivstar TV'
-            },
-            {
-                kind: 'settings',
-                title: 'Settings',
-                subtitle: 'Login, locale, headers, proxy'
-            },
-            {
-                kind: 'diagnostics',
-                title: 'Diagnostics',
-                subtitle: 'Request logs and plugin state'
-            },
-            {
-                kind: 'session',
-                title: 'Refresh session',
-                subtitle: 'Current account: ' + user
-            },
-            {
-                kind: 'logout',
-                title: 'Log out',
-                subtitle: 'Clear local Kyivstar TV session'
-            }
-        ]);
+            }];
+            var rows = [];
+
+            compilations.filter(function (item) {
+                return item.compilationElementType !== 'CONTENT_GROUP';
+            }).slice(0, 12).forEach(function (compilation) {
+                categories.push({
+                    kind: 'nav',
+                    title: compilation.displayName || compilation.name || 'Selection',
+                    subtitle: 'Videos',
+                    image: pickImage(compilation.images),
+                    route: {
+                        type: 'catalog',
+                        compilationId: compilation.id,
+                        compilationName: compilation.displayName || compilation.name || 'Selection',
+                        offset: 0
+                    }
+                });
+            });
+
+            if (categories.length) rows.push({ title: 'Categories', items: categories });
+            if (videos.length) rows.push({ title: 'Videos', items: videos.map(mapAsset) });
+
+            return { rows: rows };
+        });
     }
 
     function loadChannels(route, api) {
@@ -904,6 +1114,29 @@
         if (asset.assetId && (asset.name || asset.displayName || asset.title)) return mapAsset(asset);
 
         return null;
+    }
+
+    function buildRows(rows) {
+        var result = [];
+
+        rows.forEach(function (row) {
+            if (row.results && row.results.length) result.push(row);
+        });
+
+        return result;
+    }
+
+    function decodeQuery(value) {
+        try {
+            return decodeURIComponent(value || '');
+        } catch (error) {
+            return String(value || '');
+        }
+    }
+
+    function subtitleYear(value) {
+        var year = normalizeYear(value);
+        return year && /^\d{4}$/.test(year) ? year + '-01-01' : '';
     }
 
     function normalizeYear(value) {
@@ -1713,33 +1946,44 @@
     }
 
     function addStyles() {
-        if (document.getElementById('kyivstar-tv-styles')) return;
+        var existing = document.getElementById('kyivstar-tv-styles');
+
+        if (existing && existing.getAttribute('data-build') === PLUGIN_BUILD) return;
+        if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
 
         var style = document.createElement('style');
         style.id = 'kyivstar-tv-styles';
+        style.setAttribute('data-build', PLUGIN_BUILD);
         style.textContent = [
-            '.kyivstar-tv{padding:2.2em 3em 3em;color:#fff;width:100%;min-height:100%;box-sizing:border-box;}',
-            '.kyivstar-tv__header{display:flex;align-items:flex-end;gap:1em;margin-bottom:1.4em;}',
-            '.kyivstar-tv__title{font-size:2.2em;font-weight:700;line-height:1.05;}',
-            '.kyivstar-tv__subtitle{font-size:1em;color:rgba(255,255,255,.62);padding-bottom:.2em;}',
+            '.kyivstar-tv{padding:1.4em 2.8em 3em;color:#fff;width:100%;min-height:100%;box-sizing:border-box;}',
             '.kyivstar-tv__body,.kyivstar-tv .scroll,.kyivstar-tv .scroll__body{width:100%;min-height:20em;box-sizing:border-box;}',
+            '.kyivstar-tv-row{margin:0 0 2.15em;}',
+            '.kyivstar-tv-row__title{font-size:1.45em;font-weight:700;line-height:1.15;margin:0 0 .7em;}',
+            '.kyivstar-tv-row__body{display:flex;gap:1.1em;overflow:hidden;padding:.15em .2em .45em 0;scroll-behavior:smooth;}',
             '.kyivstar-tv__grid{display:grid;gap:1em;align-items:stretch;width:100%;max-width:86em;box-sizing:border-box;}',
             '.kyivstar-tv__grid--root{grid-template-columns:repeat(auto-fill,minmax(12em,16em));}',
             '.kyivstar-tv__grid--catalog{grid-template-columns:repeat(auto-fill,minmax(9.5em,1fr));}',
-            '.kyivstar-tv-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden;min-height:17em;outline:0;transition:transform .12s ease,border-color .12s ease,background .12s ease;}',
-            '.kyivstar-tv-card--root{min-height:11.5em;}',
-            '.kyivstar-tv-card.focus,.kyivstar-tv-card:focus,.kyivstar-tv-card:hover{transform:translateY(-2px);border-color:#ffd33d;background:rgba(255,255,255,.14);}',
+            '.kyivstar-tv-card{flex:0 0 10.8em;min-width:0;outline:0;color:#fff;transition:transform .12s ease,opacity .12s ease;}',
+            '.kyivstar-tv-card.focus,.kyivstar-tv-card:focus,.kyivstar-tv-card:hover{transform:translateY(-2px);}',
+            '.kyivstar-tv-card.focus .kyivstar-tv-card__thumb,.kyivstar-tv-card:focus .kyivstar-tv-card__thumb,.kyivstar-tv-card:hover .kyivstar-tv-card__thumb{box-shadow:0 0 0 .28em rgba(255,255,255,.94);}',
             '.kyivstar-tv-card--locked{opacity:.55;}',
-            '.kyivstar-tv-card__thumb{height:12.5em;background:#101820;display:flex;align-items:center;justify-content:center;overflow:hidden;}',
-            '.kyivstar-tv-card--root .kyivstar-tv-card__thumb{height:6.4em;}',
+            '.kyivstar-tv-card__thumb{height:16em;background:#101820;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.05);transition:box-shadow .12s ease;}',
             '.kyivstar-tv-card__thumb img{width:100%;height:100%;object-fit:cover;display:block;}',
-            '.kyivstar-tv-card__fallback{width:4em;height:4em;border-radius:8px;background:#ffd33d;color:#101820;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.3em;}',
-            '.kyivstar-tv-card__meta{padding:.8em .85em 1em;}',
-            '.kyivstar-tv-card__title{font-size:1em;font-weight:700;line-height:1.2;min-height:2.4em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}',
-            '.kyivstar-tv-card__subtitle{font-size:.82em;color:rgba(255,255,255,.62);line-height:1.25;margin-top:.35em;min-height:2.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}',
+            '.kyivstar-tv-card__fallback{width:3.6em;height:3.6em;border-radius:8px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.86);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.05em;}',
+            '.kyivstar-tv-card__fallback svg{width:2.2em;height:2.2em;}',
+            '.kyivstar-tv-card__meta{padding:.7em 0 0;}',
+            '.kyivstar-tv-card__title{font-size:1em;font-weight:600;line-height:1.18;min-height:2.36em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}',
+            '.kyivstar-tv-card__subtitle{font-size:.82em;color:rgba(255,255,255,.66);line-height:1.25;margin-top:.38em;min-height:1.05em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}',
+            '.kyivstar-tv-card--category{flex-basis:14.4em;background:rgba(255,255,255,.055);border-radius:8px;padding:1.1em 1.2em 1.2em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.055);}',
+            '.kyivstar-tv-card--category .kyivstar-tv-card__thumb{height:4.4em;background:transparent;box-shadow:none;border-radius:0;}',
+            '.kyivstar-tv-card--category.focus,.kyivstar-tv-card--category:focus,.kyivstar-tv-card--category:hover{box-shadow:0 0 0 .28em rgba(255,255,255,.94),inset 0 0 0 1px rgba(255,255,255,.18);background:rgba(255,255,255,.1);}',
+            '.kyivstar-tv-card--category.focus .kyivstar-tv-card__thumb,.kyivstar-tv-card--category:focus .kyivstar-tv-card__thumb,.kyivstar-tv-card--category:hover .kyivstar-tv-card__thumb{box-shadow:none;}',
+            '.kyivstar-tv-card--category .kyivstar-tv-card__fallback{background:transparent;color:rgba(255,255,255,.9);font-size:1.2em;}',
+            '.kyivstar-tv-card--category .kyivstar-tv-card__meta{padding-top:.75em;}',
+            '.kyivstar-tv-card--category .kyivstar-tv-card__title{min-height:1.2em;font-size:1.05em;}',
             '.kyivstar-tv__message{padding:1em 1.2em;border-radius:8px;background:rgba(255,255,255,.08);color:rgba(255,255,255,.78);display:inline-block;}',
             '.kyivstar-tv__message--error{border:1px solid rgba(255,86,86,.7);color:#ffb8b8;}',
-            '@media(max-width:720px){.kyivstar-tv{padding:1.2em}.kyivstar-tv__header{display:block}.kyivstar-tv__title{font-size:1.6em}.kyivstar-tv__grid{grid-template-columns:repeat(auto-fill,minmax(8.8em,1fr));gap:.75em}.kyivstar-tv-card{min-height:14.5em}.kyivstar-tv-card--root{min-height:10.5em}.kyivstar-tv-card__thumb{height:10em}.kyivstar-tv-card--root .kyivstar-tv-card__thumb{height:5.6em}}'
+            '@media(max-width:720px){.kyivstar-tv{padding:1.1em}.kyivstar-tv-row__title{font-size:1.2em}.kyivstar-tv-row__body{gap:.75em}.kyivstar-tv-card{flex-basis:8.8em}.kyivstar-tv-card__thumb{height:13em}.kyivstar-tv-card--category{flex-basis:12em}.kyivstar-tv-card--category .kyivstar-tv-card__thumb{height:3.8em}.kyivstar-tv__grid{grid-template-columns:repeat(auto-fill,minmax(8.8em,1fr));gap:.75em}}'
         ].join('');
         document.head.appendChild(style);
     }
