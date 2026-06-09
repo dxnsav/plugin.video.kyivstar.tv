@@ -368,8 +368,9 @@
         var existing = document.getElementById('kyivstar-tv-runtime-styles');
         var css = [
             '.button--kyivstar-tv .full-start__button-name{display:flex;align-items:center;justify-content:center;min-width:120px;}',
-            '.button--kyivstar-tv .full-start__button-name img{transition:background-color .12s ease,padding .12s ease,border-radius .12s ease;}',
-            '.button--kyivstar-tv.focus .full-start__button-name img,.button--kyivstar-tv:hover .full-start__button-name img{background:#111;padding:.22em .38em;border-radius:.28em;}',
+            '.button--kyivstar-tv .kyivstar-logo-dark{display:none;}',
+            '.button--kyivstar-tv.focus .kyivstar-logo-light,.button--kyivstar-tv:hover .kyivstar-logo-light{display:none;}',
+            '.button--kyivstar-tv.focus .kyivstar-logo-dark,.button--kyivstar-tv:hover .kyivstar-logo-dark{display:block;}',
             '.button--kyivstar-tv.focus .full-start__button-icon img,.button--kyivstar-tv:hover .full-start__button-icon img{filter:none;}'
         ].join('\n');
 
@@ -1009,7 +1010,7 @@
     function createKyivstarFullButton(playButton) {
         var button = $('<div class="full-start__button button selector button--kyivstar-tv">' +
             '<div class="full-start__button-icon">' + iconSvg() + '</div>' +
-            '<div class="full-start__button-name">' + brandLogoHtml() + '</div>' +
+            '<div class="full-start__button-name">' + brandLogoHtml() + brandLogoDarkHtml() + '</div>' +
             '</div>');
 
         if (playButton && playButton.length) {
@@ -3042,7 +3043,11 @@
     }
 
     function brandLogoHtml() {
-        return '<img src="' + ASSET_BASE + 'logo-ua.svg" alt="' + TITLE + '" style="width:120px;height:21px;object-fit:contain;display:block;">';
+        return '<img class="kyivstar-logo-light" src="' + ASSET_BASE + 'logo-ua.svg" alt="' + TITLE + '" style="width:120px;height:21px;object-fit:contain;display:block;">';
+    }
+
+    function brandLogoDarkHtml() {
+        return '<img class="kyivstar-logo-dark" src="' + ASSET_BASE + 'logo-ua-black.svg" alt="' + TITLE + '" style="width:120px;height:21px;object-fit:contain;display:none;">';
     }
 
     function iconSvg() {

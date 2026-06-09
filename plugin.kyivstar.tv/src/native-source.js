@@ -387,7 +387,7 @@
     function createKyivstarFullButton(playButton) {
         var button = $('<div class="full-start__button button selector button--kyivstar-tv">' +
             '<div class="full-start__button-icon">' + iconSvg() + '</div>' +
-            '<div class="full-start__button-name">' + brandLogoHtml() + '</div>' +
+            '<div class="full-start__button-name">' + brandLogoHtml() + brandLogoDarkHtml() + '</div>' +
             '</div>');
 
         if (playButton && playButton.length) {
