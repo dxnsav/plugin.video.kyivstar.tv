@@ -9,6 +9,7 @@
 
         try {
             ensureDeviceId();
+            injectRuntimeStyles();
             addApiSource();
             addFullPlayerHook();
             addSettings();
@@ -41,6 +42,7 @@
 
         if (window.appready) {
             addSideMenuEntry();
+            injectRuntimeStyles();
             addApiSource();
             addFullPlayerHook();
             addSettings();
@@ -50,6 +52,7 @@
             Lampa.Listener.follow('app', function (event) {
                 if (event.type === 'ready') {
                     addSideMenuEntry();
+                    injectRuntimeStyles();
                     addApiSource();
                     addFullPlayerHook();
                     addSettings();
@@ -62,6 +65,26 @@
 
     function initNotice() {
         log('loaded');
+    }
+
+    function injectRuntimeStyles() {
+        var existing = document.getElementById('kyivstar-tv-runtime-styles');
+        var css = [
+            '.button--kyivstar-tv .full-start__button-name{display:flex;align-items:center;justify-content:center;min-width:120px;}',
+            '.button--kyivstar-tv .full-start__button-name img{transition:background-color .12s ease,padding .12s ease,border-radius .12s ease;}',
+            '.button--kyivstar-tv.focus .full-start__button-name img,.button--kyivstar-tv:hover .full-start__button-name img{background:#111;padding:.22em .38em;border-radius:.28em;}',
+            '.button--kyivstar-tv.focus .full-start__button-icon img,.button--kyivstar-tv:hover .full-start__button-icon img{filter:none;}'
+        ].join('\n');
+
+        if (existing) {
+            existing.textContent = css;
+            return;
+        }
+
+        existing = document.createElement('style');
+        existing.id = 'kyivstar-tv-runtime-styles';
+        existing.textContent = css;
+        document.head.appendChild(existing);
     }
 
     function log(message) {

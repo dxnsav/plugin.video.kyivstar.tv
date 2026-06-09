@@ -163,6 +163,10 @@
             if (!item || movie.source !== COMPONENT || event.type !== 'complite' || !event.body) return;
 
             addKyivstarFullButton(event.body, item);
+            patchKyivstarFullLabels(event.body);
+            setTimeout(function () {
+                patchKyivstarFullLabels(event.body);
+            }, 250);
         });
 
         fullPlayerHookAdded = true;
@@ -201,6 +205,17 @@
         debugLog('info', 'full:kyivstar-button:added', {
             assetId: item.assetId || '',
             title: item.title || ''
+        });
+    }
+
+    function patchKyivstarFullLabels(body) {
+        var root = $(body);
+
+        root.find('*').contents().each(function () {
+            if (this.nodeType !== 3) return;
+            if (this.nodeValue && this.nodeValue.indexOf('KYIVSTAR_TV') !== -1) {
+                this.nodeValue = this.nodeValue.replace(/KYIVSTAR_TV/g, TITLE);
+            }
         });
     }
 
@@ -540,6 +555,10 @@
         var movie = {
             id: item.assetId || item.title || TITLE,
             source: COMPONENT,
+            source_name: TITLE,
+            source_title: TITLE,
+            provider_name: TITLE,
+            source_logo: ASSET_BASE + 'favicon.ico',
             method: isSeries ? 'tv' : 'movie',
             title: String(item.title || TITLE),
             original_title: String(item.title || TITLE),
