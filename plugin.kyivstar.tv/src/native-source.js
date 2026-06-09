@@ -543,7 +543,7 @@
 
         if (Lampa.Activity && Lampa.Activity.push) {
             Lampa.Activity.push({
-                component: 'category',
+                component: 'category_full',
                 source: COMPONENT,
                 title: title,
                 url: url,
