@@ -159,24 +159,82 @@
         Lampa.Listener.follow('full', function (event) {
             var movie = event && event.data ? event.data.movie : null;
             var item = movie && movie._kyivstar ? movie._kyivstar : null;
-            var button;
 
             if (!item || movie.source !== COMPONENT || event.type !== 'complite' || !event.body) return;
 
-            button = $(event.body).find('.button--play').eq(0);
-            if (!button.length) return;
-
-            button.off('hover:enter click');
-            button.on('hover:enter click', function (e) {
-                if (e && e.preventDefault) e.preventDefault();
-                if (e && e.stopPropagation) e.stopPropagation();
-                openKyivstarItem(item);
-                return false;
-            });
+            addKyivstarFullButton(event.body, item);
         });
 
         fullPlayerHookAdded = true;
         debugLog('info', 'full:player-hook-added', {});
+    }
+
+    function addKyivstarFullButton(body, item) {
+        var root = $(body);
+        var playButton = root.find('.button--play').eq(0);
+        var buttonRow = playButton.length ? playButton.parent() : findFullButtonRow(root);
+        var button;
+
+        root.find('.button--kyivstar-tv').remove();
+        if (!buttonRow.length) {
+            debugLog('warn', 'full:kyivstar-button:no-row', {
+                assetId: item.assetId || ''
+            });
+            return;
+        }
+
+        button = playButton.length ? playButton.clone(false, false) : createKyivstarFullButton();
+        button
+            .removeClass('button--play focus')
+            .addClass('button--kyivstar-tv selector')
+            .removeAttr('data-action data-subtype');
+
+        setKyivstarFullButtonTitle(button);
+        button.off('hover:enter click').on('hover:enter click', function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            if (e && e.stopPropagation) e.stopPropagation();
+            openKyivstarItem(item);
+            return false;
+        });
+
+        if (playButton.length) button.insertAfter(playButton);
+        else buttonRow.append(button);
+
+        if (Lampa.Controller && Lampa.Controller.collectionSet) {
+            Lampa.Controller.collectionSet(root);
+        }
+
+        debugLog('info', 'full:kyivstar-button:added', {
+            assetId: item.assetId || '',
+            title: item.title || ''
+        });
+    }
+
+    function findFullButtonRow(root) {
+        var row = root.find('.full-start__buttons, .full-start-new__buttons, .full-start__buttons-line').eq(0);
+
+        if (row.length) return row;
+
+        row = root.find('.button, .full-start__button, .selector').filter(function () {
+            return $(this).closest('.full-start, .full-start-new, .full').length > 0;
+        }).eq(0).parent();
+
+        return row;
+    }
+
+    function createKyivstarFullButton() {
+        return $('<div class="full-start__button button selector">' +
+            '<div class="full-start__button-icon">' + iconSvg() + '</div>' +
+            '<div class="full-start__button-name">Kyivstar TV</div>' +
+            '</div>');
+    }
+
+    function setKyivstarFullButtonTitle(button) {
+        var title = 'Kyivstar TV';
+        var labels = button.find('.full-start__button-name, .button__text, .button__name, span');
+
+        if (labels.length) labels.last().text(title);
+        else button.text(title);
     }
 
     function filterNativeCompilations(compilations) {
