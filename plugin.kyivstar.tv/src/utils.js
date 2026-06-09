@@ -325,11 +325,11 @@
     }
 
     function brandLogoHtml() {
-        return '<img class="kyivstar-logo-light" src="' + ASSET_BASE + 'logo-ua.svg" alt="' + TITLE + '" style="width:120px;height:21px;object-fit:contain;display:block;">';
+        return '<img class="kyivstar-logo-light" src="' + ASSET_BASE + 'logo-ua.svg" alt="' + TITLE + '" style="width:120px;height:21px;object-fit:contain;">';
     }
 
     function brandLogoDarkHtml() {
-        return '<img class="kyivstar-logo-dark" src="' + ASSET_BASE + 'logo-ua-black.svg" alt="' + TITLE + '" style="width:120px;height:21px;object-fit:contain;display:none;">';
+        return '<img class="kyivstar-logo-dark" src="' + ASSET_BASE + 'logo-ua-black.svg" alt="' + TITLE + '" style="width:120px;height:21px;object-fit:contain;">';
     }
 
     function iconSvg() {

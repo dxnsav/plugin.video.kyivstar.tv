@@ -71,9 +71,10 @@
         var existing = document.getElementById('kyivstar-tv-runtime-styles');
         var css = [
             '.button--kyivstar-tv .full-start__button-name{display:flex;align-items:center;justify-content:center;min-width:120px;}',
-            '.button--kyivstar-tv .kyivstar-logo-dark{display:none;}',
-            '.button--kyivstar-tv.focus .kyivstar-logo-light,.button--kyivstar-tv:hover .kyivstar-logo-light{display:none;}',
-            '.button--kyivstar-tv.focus .kyivstar-logo-dark,.button--kyivstar-tv:hover .kyivstar-logo-dark{display:block;}',
+            '.button--kyivstar-tv .kyivstar-logo-light{display:block!important;}',
+            '.button--kyivstar-tv .kyivstar-logo-dark{display:none!important;}',
+            '.button--kyivstar-tv.focus .kyivstar-logo-light,.button--kyivstar-tv.hover .kyivstar-logo-light,.button--kyivstar-tv.selector--focus .kyivstar-logo-light,.button--kyivstar-tv.selector--hover .kyivstar-logo-light,.button--kyivstar-tv:hover .kyivstar-logo-light{display:none!important;}',
+            '.button--kyivstar-tv.focus .kyivstar-logo-dark,.button--kyivstar-tv.hover .kyivstar-logo-dark,.button--kyivstar-tv.selector--focus .kyivstar-logo-dark,.button--kyivstar-tv.selector--hover .kyivstar-logo-dark,.button--kyivstar-tv:hover .kyivstar-logo-dark{display:block!important;}',
             '.button--kyivstar-tv.focus .full-start__button-icon img,.button--kyivstar-tv:hover .full-start__button-icon img{filter:none;}'
         ].join('\n');
 
