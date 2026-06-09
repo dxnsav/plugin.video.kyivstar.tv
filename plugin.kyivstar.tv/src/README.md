@@ -9,21 +9,21 @@ npm run build:lampa
 npm run check:lampa
 ```
 
-The build script concatenates `*.js` files in lexicographic order and wraps them in one IIFE.
+The build script concatenates files in the explicit order listed in `scripts/build-lampa-plugin.js` and wraps them in one IIFE.
 
 ## File map
 
-- `00-state.js` - constants, shared state, storage keys.
-- `10-boot.js` - startup flow and plugin initialization.
-- `20-settings-registration.js` - Lampa settings registration.
-- `30-lampa-integration.js` - menu, activity and global Lampa integration.
-- `40-native-source.js` - native source/search hooks.
-- `50-search.js` - Kyivstar search UI/data flow.
-- `55-settings-menu.js` - Kyivstar TV settings screen and diagnostics actions.
-- `56-filter-menu.js` - Kyivstar filter and sort menu.
-- `60-custom-component.js` - custom Lampa component and page rendering.
-- `70-routes-mappers.js` - route handlers and asset/card mappers.
-- `80-auth-playback.js` - login/session and playback entry points.
-- `90-api.js` - Kyivstar API client methods.
-- `95-utils.js` - generic helpers.
-- `99-styles.js` - injected CSS.
+- `state.js` - constants, shared state, storage keys.
+- `bootstrap.js` - startup flow and plugin initialization.
+- `settings-registration.js` - Lampa settings registration.
+- `lampa-integration.js` - menu, activity and global Lampa integration.
+- `native-source.js` - native source/search hooks.
+- `search-source.js` - Kyivstar search UI/data flow.
+- `settings-menu.js` - Kyivstar TV settings screen and diagnostics actions.
+- `catalog-filter-menu.js` - Kyivstar filter and sort menu.
+- `catalog-component.js` - custom Lampa component and page rendering.
+- `routes-and-mappers.js` - route handlers and asset/card mappers.
+- `auth-and-playback.js` - login/session and playback entry points.
+- `api-client.js` - Kyivstar API client methods.
+- `utils.js` - generic helpers.
+- `styles.js` - injected CSS.
