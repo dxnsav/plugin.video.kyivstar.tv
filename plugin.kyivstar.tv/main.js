@@ -80,6 +80,9 @@
                 logs: function () {
                     return setting(KEYS.logs);
                 },
+                catalogDebug: function (areaId) {
+                    return catalogDebug(new KyivstarApi(), areaId);
+                },
                 clearLogs: function () {
                     clearDebugLogs();
                 }
@@ -589,7 +592,7 @@
     }
 
     function loadNativeGroupPage(api, groupId, offset, limit) {
-        return api.getContentAreaElements(groupId, [], null, offset, limit).then(function (assets) {
+        return api.getContentGroupElements(groupId, [], null, offset, limit).then(function (assets) {
             assets = asArray(assets);
             if (assets.length) return assets;
 
@@ -1041,6 +1044,38 @@
             console.log('[KyivstarTV] ' + formatLogEntry(entry));
         });
         console.log('[KyivstarTV] LOG DUMP END');
+    }
+
+    function catalogDebug(api, areaId) {
+        areaId = areaId || null;
+
+        return Promise.all([
+            api.getCompilations(areaId).catch(function (error) {
+                return { error: error.message || String(error) };
+            }),
+            api.getFilters(areaId).catch(function (error) {
+                return { error: error.message || String(error) };
+            }),
+            api.getSortElements().catch(function (error) {
+                return { error: error.message || String(error) };
+            })
+        ]).then(function (result) {
+            var data = {
+                areaId: areaId,
+                chips: result[0],
+                filters: result[1],
+                sortElements: result[2]
+            };
+
+            debugLog('info', 'catalog:debug', {
+                areaId: areaId || '',
+                chips: asArray(data.chips).length,
+                filters: asArray(data.filters).length,
+                sortElements: asArray(data.sortElements).length
+            });
+
+            return data;
+        });
     }
 
     function formatLogEntry(entry) {
@@ -2015,9 +2050,9 @@
 
     KyivstarApi.prototype.getCompilations = function (areaId) {
         var self = this;
-        return this.cached('compilations-' + (areaId || 'root'), CACHE_CATALOG_MS, function () {
+        return this.cached('compilations-v2-' + (areaId || 'root'), CACHE_CATALOG_MS, function () {
             return self.withSession(function (session) {
-                return self.request('compilations;jsessionid=' + encodeURIComponent(session.sessionId), {
+                return self.request('api/v1/compilations;jsessionid=' + encodeURIComponent(session.sessionId), {
                     method: 'POST',
                     json: {
                         contentAreaId: areaId,
@@ -2028,16 +2063,72 @@
         });
     };
 
+    KyivstarApi.prototype.getFilters = function (areaId) {
+        var self = this;
+        return this.cached('filters-v2-' + (areaId || 'root'), CACHE_CATALOG_MS, function () {
+            return self.withSession(function (session) {
+                return self.request('api/v1/filters;jsessionid=' + encodeURIComponent(session.sessionId), {
+                    method: 'POST',
+                    json: {
+                        contentAreaId: areaId || null
+                    }
+                });
+            });
+        });
+    };
+
+    KyivstarApi.prototype.getActiveFilters = function (payload) {
+        var self = this;
+        return this.withSession(function (session) {
+            return self.request('api/v1/gallery/filters/content-area/active-filters;jsessionid=' + encodeURIComponent(session.sessionId), {
+                method: 'POST',
+                json: payload || {}
+            });
+        });
+    };
+
+    KyivstarApi.prototype.getSortElements = function () {
+        var self = this;
+        return this.cached('sort-elements-v2', CACHE_CATALOG_MS, function () {
+            return self.withSession(function (session) {
+                return self.request('api/v1/filters/sort-elements;jsessionid=' + encodeURIComponent(session.sessionId));
+            });
+        });
+    };
+
     KyivstarApi.prototype.getContentAreaElements = function (compilation, filters, sort, offset, limit) {
         var self = this;
-        var key = ['content', compilation || 'root', (filters || []).join(','), sort || 'none', offset, limit].join('-');
+        var key = ['content-v2', compilation || 'root', (filters || []).join(','), sort || 'none', offset, limit].join('-');
 
         return this.cached(key, CACHE_CHANNELS_MS, function () {
             return self.withSession(function (session) {
-                return self.request('gallery/filters/content-area;jsessionid=' + encodeURIComponent(session.sessionId), {
+                return self.request('api/v1/gallery/filters/content-area;jsessionid=' + encodeURIComponent(session.sessionId), {
                     method: 'POST',
                     json: {
                         compilationElementId: compilation,
+                        filterElementIds: filters || [],
+                        filterSortElementId: sort,
+                        offset: offset || 0,
+                        limit: limit || LIMIT,
+                        sortOrder: null
+                    }
+                });
+            });
+        });
+    };
+
+    KyivstarApi.prototype.getContentGroupElements = function (groupId, filters, sort, offset, limit) {
+        var self = this;
+        var key = ['content-group-v2', groupId || 'none', (filters || []).join(','), sort || 'none', offset, limit].join('-');
+
+        return this.cached(key, CACHE_CHANNELS_MS, function () {
+            return self.withSession(function (session) {
+                return self.request('api/v1/gallery/filters/content-group;jsessionid=' + encodeURIComponent(session.sessionId), {
+                    method: 'POST',
+                    json: {
+                        contentGroupId: groupId,
+                        contentGroupElementId: groupId,
+                        contentGroupAssetId: groupId,
                         filterElementIds: filters || [],
                         filterSortElementId: sort,
                         offset: offset || 0,
