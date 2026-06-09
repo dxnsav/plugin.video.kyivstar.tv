@@ -20,6 +20,8 @@
     var searchSourceAdded = false;
     var apiSourceAdded = false;
     var fullPlayerHookAdded = false;
+    var episodePlaybackHookAdded = false;
+    var latestEpisodeContext = null;
     var playRequestLock = { key: '', time: 0 };
 
     var KEYS = {

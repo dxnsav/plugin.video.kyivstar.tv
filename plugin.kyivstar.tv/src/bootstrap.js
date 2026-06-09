@@ -12,6 +12,7 @@
             injectRuntimeStyles();
             addApiSource();
             addFullPlayerHook();
+            addEpisodePlaybackHook();
             addSettings();
             addSearchSource();
             window.plugin_kyivstar_tv_ready = true;
@@ -45,6 +46,7 @@
             injectRuntimeStyles();
             addApiSource();
             addFullPlayerHook();
+            addEpisodePlaybackHook();
             addSettings();
             addSearchSource();
             initNotice();
@@ -55,6 +57,7 @@
                     injectRuntimeStyles();
                     addApiSource();
                     addFullPlayerHook();
+                    addEpisodePlaybackHook();
                     addSettings();
                     addSearchSource();
                     initNotice();

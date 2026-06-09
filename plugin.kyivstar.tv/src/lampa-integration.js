@@ -67,6 +67,7 @@
         source.main = sourceMain;
         source.list = sourceList;
         source.full = sourceFull;
+        source.seasons = sourceSeasons;
         source.img = sourceImg;
         source.clear = function () {
             new KyivstarApi().clear();

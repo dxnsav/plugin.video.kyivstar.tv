@@ -213,6 +213,8 @@
     var searchSourceAdded = false;
     var apiSourceAdded = false;
     var fullPlayerHookAdded = false;
+    var episodePlaybackHookAdded = false;
+    var latestEpisodeContext = null;
     var playRequestLock = { key: '', time: 0 };
 
     var KEYS = {
@@ -312,6 +314,7 @@
             injectRuntimeStyles();
             addApiSource();
             addFullPlayerHook();
+            addEpisodePlaybackHook();
             addSettings();
             addSearchSource();
             window.plugin_kyivstar_tv_ready = true;
@@ -345,6 +348,7 @@
             injectRuntimeStyles();
             addApiSource();
             addFullPlayerHook();
+            addEpisodePlaybackHook();
             addSettings();
             addSearchSource();
             initNotice();
@@ -355,6 +359,7 @@
                     injectRuntimeStyles();
                     addApiSource();
                     addFullPlayerHook();
+                    addEpisodePlaybackHook();
                     addSettings();
                     addSearchSource();
                     initNotice();
@@ -615,6 +620,7 @@
         source.main = sourceMain;
         source.list = sourceList;
         source.full = sourceFull;
+        source.seasons = sourceSeasons;
         source.img = sourceImg;
         source.clear = function () {
             new KyivstarApi().clear();
@@ -725,6 +731,71 @@
         });
     }
 
+    function sourceSeasons(tv, from, onComplete) {
+        var api = new KyivstarApi();
+        var item = extractKyivstarItem(tv);
+        var card = tv && tv.source === COMPONENT ? tv : (tv && tv._kyivstar ? buildFullMovie(tv._kyivstar) : tv);
+        var seasons = asArray(from).map(function (season) {
+            return parseInt(season, 10) || 1;
+        });
+        var result = {};
+
+        if (!item || !item.assetId) {
+            onComplete(result);
+            return;
+        }
+
+        if (!seasons.length) seasons = [1];
+
+        loadKyivstarSeriesInfo(api, item, card).then(function (info) {
+            var fullCard = info.card || card;
+
+            return Promise.all(seasons.map(function (season) {
+                return loadAllSeasonEpisodes(api, item.assetId, season, 0, []).then(function (episodes) {
+                    var mapped = episodes.map(function (episode, index) {
+                        return mapLampaEpisode(episode, season, index, fullCard);
+                    }).filter(Boolean);
+
+                    latestEpisodeContext = {
+                        source: COMPONENT,
+                        cardId: (fullCard && fullCard.id) || item.assetId,
+                        season: season,
+                        episodes: mapped.map(function (episode) {
+                            return episode._kyivstar;
+                        })
+                    };
+
+                    result[String(season)] = {
+                        id: item.assetId,
+                        name: t('season_prefix') + season,
+                        season_number: season,
+                        vote_average: seasonRating(info.asset, season) || (fullCard && fullCard.vote_average) || 0,
+                        air_date: firstAirDate(mapped) || (fullCard && fullCard.first_air_date) || '',
+                        overview: (fullCard && fullCard.overview) || '',
+                        episodes: mapped,
+                        seasons_count: info.seasonsCount || seasons.length
+                    };
+                });
+            }));
+        }).then(function () {
+            debugLog('info', 'api:seasons:ok', {
+                assetId: item.assetId,
+                seasons: seasons,
+                counts: seasons.map(function (season) {
+                    return result[String(season)] && result[String(season)].episodes ? result[String(season)].episodes.length : 0;
+                })
+            });
+            onComplete(result);
+        }).catch(function (error) {
+            debugLog('error', 'api:seasons:error', {
+                assetId: item.assetId,
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+            onComplete(result);
+        });
+    }
+
     function sourceFull(params, onComplete, onError) {
         var api = new KyivstarApi();
         var item = extractKyivstarItem(params);
@@ -814,6 +885,45 @@
         debugLog('info', 'full:player-hook-added', {});
     }
 
+    function addEpisodePlaybackHook() {
+        if (episodePlaybackHookAdded) return;
+        if (!window.$) {
+            setTimeout(addEpisodePlaybackHook, 500);
+            return;
+        }
+
+        $(document).off('hover:enter.kyivstar-tv-episode click.kyivstar-tv-episode', '.season-episode');
+        $(document).on('hover:enter.kyivstar-tv-episode click.kyivstar-tv-episode', '.season-episode', function (event) {
+            var context = currentEpisodeContext();
+            var index;
+            var episode;
+
+            if (!context || !context.episodes || !context.episodes.length) return;
+
+            index = $('.activity--active .season-episode').index(this);
+            if (index < 0) index = $('.season-episode').index(this);
+            episode = context.episodes[index];
+
+            if (!episode || !episode.assetId) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+            debugLog('info', 'episodes:play', {
+                assetId: episode.assetId,
+                title: episode.title || '',
+                season: context.season || '',
+                index: index
+            });
+
+            playItem(new KyivstarApi(), episode);
+        });
+
+        episodePlaybackHookAdded = true;
+        debugLog('info', 'episodes:playback-hook-added', {});
+    }
+
     function addKyivstarFullButton(body, item) {
         var root = $(body);
         var playButton = root.find('.button--play').eq(0);
@@ -891,11 +1001,7 @@
         });
 
         if (isKyivstarSeries(item)) {
-            openNativeRouteCategory({
-                type: 'series-seasons',
-                assetId: item.assetId,
-                title: item.title || TITLE
-            });
+            openNativeEpisodes(item);
             return;
         }
 
@@ -1181,6 +1287,162 @@
 
         notify(t('source_not_ready'));
         return false;
+    }
+
+    function openNativeEpisodes(item, season) {
+        var card = buildFullMovie(item);
+        var selectedSeason = season || defaultSeasonNumber(card);
+
+        debugLog('info', 'episodes:open', {
+            assetId: item.assetId || '',
+            title: item.title || '',
+            season: selectedSeason
+        });
+
+        if (Lampa.Activity && Lampa.Activity.push) {
+            Lampa.Activity.push({
+                component: 'episodes',
+                source: COMPONENT,
+                title: t('episodes'),
+                card: card,
+                season: selectedSeason,
+                page: 1
+            });
+            return true;
+        }
+
+        openSeriesEpisodeSelect(new KyivstarApi(), item);
+        return false;
+    }
+
+    function currentEpisodeContext() {
+        var active = Lampa.Activity && Lampa.Activity.active ? Lampa.Activity.active() : null;
+        var object = active && active.object ? active.object : {};
+        var card = object.card || {};
+        var season = object.season || (latestEpisodeContext && latestEpisodeContext.season);
+
+        if (active && active.component && active.component !== 'episodes') return null;
+        if (card && card.source && card.source !== COMPONENT) return null;
+        if (!latestEpisodeContext) return null;
+        if (card && card.id && latestEpisodeContext.cardId && String(card.id) !== String(latestEpisodeContext.cardId)) return null;
+        if (season && latestEpisodeContext.season && Number(season) !== Number(latestEpisodeContext.season)) return null;
+
+        return latestEpisodeContext;
+    }
+
+    function loadKyivstarSeriesInfo(api, item, card) {
+        return api.getAssetInfo(item.assetId).then(function (info) {
+            var asset = asArray(info)[0] || item.raw || {};
+            var seasons = normalizeSeasons(asset.seasons);
+            var fullCard = card || buildFullMovie(mapAsset(asset));
+
+            return {
+                asset: asset,
+                card: fullCard,
+                seasonsCount: seasons.length || fullCard.number_of_seasons || 1
+            };
+        }).catch(function (error) {
+            debugLog('warn', 'api:seasons:details-error', {
+                assetId: item.assetId || '',
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+
+            return {
+                asset: item.raw || {},
+                card: card || buildFullMovie(item),
+                seasonsCount: (card && card.number_of_seasons) || 1
+            };
+        });
+    }
+
+    function loadAllSeasonEpisodes(api, assetId, season, offset, collected) {
+        return api.getTvGroup(assetId, season, offset, LIMIT).then(function (page) {
+            page = asArray(page);
+            collected = collected.concat(page);
+
+            if (page.length === LIMIT && collected.length < 500) {
+                return loadAllSeasonEpisodes(api, assetId, season, offset + page.length, collected);
+            }
+
+            return collected;
+        });
+    }
+
+    function mapLampaEpisode(episode, season, index, card) {
+        var mapped = mapAsset(episode);
+        var raw = mapped.raw || episode || {};
+        var episodeNumber = parseEpisodeNumber(raw, index);
+        var release = raw.airDate || raw.releaseDate || raw.release_date || raw.startDate || '';
+        var runtime = raw.duration ? Math.round(Number(raw.duration) / 60) : 0;
+
+        mapped.kind = 'episode';
+
+        return {
+            id: raw.assetId || mapped.assetId || [card && card.id, season, episodeNumber].join(':'),
+            assetId: raw.assetId || mapped.assetId,
+            source: COMPONENT,
+            kind: 'episode',
+            title: mapped.title,
+            name: mapped.title || (t('episode_prefix') + episodeNumber),
+            original_name: card && (card.original_name || card.name || card.title),
+            episode_number: episodeNumber,
+            season_number: season,
+            air_date: formatLampaDate(release),
+            runtime: runtime || 0,
+            vote_average: itemRating(mapped) || 0,
+            still_path: '',
+            img: mapped.image || '',
+            poster: mapped.image || '',
+            videoType: mapped.videoType || 'VIRTUAL',
+            raw: raw,
+            _kyivstar: mapped
+        };
+    }
+
+    function parseEpisodeNumber(raw, index) {
+        var number = raw.episodeNumber || raw.episode_number || raw.episode || raw.number || raw.displayNumber;
+        number = parseInt(number, 10);
+        return number > 0 ? number : index + 1;
+    }
+
+    function formatLampaDate(value) {
+        if (!value) return '';
+
+        value = String(value);
+        if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+
+        return subtitleYear(value);
+    }
+
+    function firstAirDate(episodes) {
+        for (var i = 0; i < episodes.length; i++) {
+            if (episodes[i].air_date) return episodes[i].air_date;
+        }
+
+        return '';
+    }
+
+    function seasonRating(asset, season) {
+        var seasons = asArray(asset && asset.seasons);
+
+        for (var i = 0; i < seasons.length; i++) {
+            if (seasonNumber(seasons[i]) === season) {
+                return parseFloat(seasons[i].vote_average || seasons[i].rating || seasons[i].movieRating || 0) || 0;
+            }
+        }
+
+        return 0;
+    }
+
+    function defaultSeasonNumber(card) {
+        var seasons = asArray(card && card.seasons).filter(function (season) {
+            return !season.episode_count || season.episode_count > 0;
+        });
+
+        if (!seasons.length) return 1;
+
+        return seasonNumber(seasons[seasons.length - 1]);
     }
 
     function mapNativeListItem(item) {
