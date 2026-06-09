@@ -100,11 +100,39 @@
             return;
         }
 
-        if (item.kind === 'nav' && item.route) {
-            notify('Open this item from the native Kyivstar TV source list.');
-        } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
+        if (item.kind === 'channel') {
             playItem(new KyivstarApi(), item);
+        } else if (item.kind === 'nav' || item.kind === 'vod' || item.kind === 'episode') {
+            openKyivstarFullCard(item);
         }
+    }
+
+    function openKyivstarFullCard(item) {
+        var card = mapNativeCard(item);
+
+        debugLog('info', 'search:open-full', {
+            assetId: item.assetId || '',
+            title: item.title || '',
+            method: card.method || ''
+        });
+
+        if (Lampa.Router && Lampa.Router.call) {
+            Lampa.Router.call('full', card);
+            return;
+        }
+
+        if (Lampa.Activity && Lampa.Activity.push) {
+            Lampa.Activity.push({
+                component: 'full',
+                source: COMPONENT,
+                method: card.method,
+                card: card,
+                movie: card
+            });
+            return;
+        }
+
+        notify('Lampa full card API is not available.');
     }
 
     function showMainMenu(attempt) {
