@@ -2,7 +2,7 @@
     'use strict';
 
     // state.js
-    var PLUGIN_BUILD = '2026-06-09-native-only-source';
+    var PLUGIN_BUILD = '2026-06-09-native-full-search-fixes';
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
     var TITLE = 'Kyivstar TV';
@@ -23,6 +23,7 @@
     var searchSourceAdded = false;
     var apiSourceAdded = false;
     var fullPlayerHookAdded = false;
+    var playRequestLock = { key: '', time: 0 };
 
     var KEYS = {
         loginType: 'kyivstar_login_type',
@@ -543,17 +544,11 @@
             return;
         }
 
-        button = playButton.length ? playButton.clone(false, false) : createKyivstarFullButton();
-        button
-            .removeClass('button--play focus')
-            .addClass('button--kyivstar-tv selector')
-            .removeAttr('data-action data-subtype');
-
-        setKyivstarFullButtonTitle(button);
-        button.off('hover:enter click').on('hover:enter click', function (e) {
+        button = createKyivstarFullButton(playButton);
+        button.on('hover:enter click', function (e) {
             if (e && e.preventDefault) e.preventDefault();
             if (e && e.stopPropagation) e.stopPropagation();
-            openKyivstarItem(item);
+            playKyivstarFromFullButton(item);
             return false;
         });
 
@@ -570,6 +565,27 @@
         });
     }
 
+    function playKyivstarFromFullButton(item) {
+        if (!item || !item.assetId) {
+            notify('Kyivstar TV item is not playable.');
+            return;
+        }
+
+        if (item.locked) {
+            notify('This item is not available for the current account.');
+            return;
+        }
+
+        debugLog('info', 'full:kyivstar-button:play', {
+            assetId: item.assetId || '',
+            title: item.title || '',
+            kind: item.kind || '',
+            type: item.videoType || ''
+        });
+
+        playItem(new KyivstarApi(), item);
+    }
+
     function findFullButtonRow(root) {
         var row = root.find('.full-start__buttons, .full-start-new__buttons, .full-start__buttons-line').eq(0);
 
@@ -582,19 +598,26 @@
         return row;
     }
 
-    function createKyivstarFullButton() {
-        return $('<div class="full-start__button button selector">' +
+    function createKyivstarFullButton(playButton) {
+        var button = $('<div class="full-start__button button selector button--kyivstar-tv">' +
             '<div class="full-start__button-icon">' + iconSvg() + '</div>' +
             '<div class="full-start__button-name">Kyivstar TV</div>' +
             '</div>');
+
+        if (playButton && playButton.length) {
+            copyButtonShapeClasses(playButton, button);
+        }
+
+        return button;
     }
 
-    function setKyivstarFullButtonTitle(button) {
-        var title = 'Kyivstar TV';
-        var labels = button.find('.full-start__button-name, .button__text, .button__name, span');
+    function copyButtonShapeClasses(source, target) {
+        var classes = String(source.attr('class') || '').split(/\s+/);
 
-        if (labels.length) labels.last().text(title);
-        else button.text(title);
+        classes.forEach(function (name) {
+            if (!name || name === 'button--play' || name === 'focus') return;
+            target.addClass(name);
+        });
     }
 
     function filterNativeCompilations(compilations) {
@@ -802,9 +825,11 @@
     // search-source.js
     function createSearchSource() {
         var api = new KyivstarApi();
+        var source;
 
-        return {
+        source = {
             title: TITLE,
+            count: 0,
             params: {
                 lazy: true,
                 save: false,
@@ -818,12 +843,25 @@
 
                 api.search(query).then(function (results) {
                     var rows = buildNativeSearchRows(results || []);
+                    var count = countSearchRows(rows);
+
+                    source.count = count;
+                    source.results_count = count;
+                    source.total_results = count;
+
                     debugLog('info', 'search:native:ok', {
                         query: query,
-                        rows: rows.length
+                        rows: rows.length,
+                        count: count
                     });
+                    rows.count = count;
+                    rows.results_count = count;
+                    rows.total_results = count;
                     done(rows);
                 }).catch(function (error) {
+                    source.count = 0;
+                    source.results_count = 0;
+                    source.total_results = 0;
                     debugLog('error', 'search:native:error', {
                         query: query,
                         error: error.message || String(error),
@@ -841,6 +879,8 @@
                 api.clear();
             }
         };
+
+        return source;
     }
 
     function buildNativeSearchRows(results) {
@@ -859,9 +899,19 @@
         });
 
         return buildRows([
-            { title: 'Videos', type: 'movie', results: videos },
-            { title: 'Live TV', type: 'channel', results: channels }
+            { title: 'Videos', type: 'movie', results: videos, count: videos.length, total_results: videos.length },
+            { title: 'Live TV', type: 'channel', results: channels, count: channels.length, total_results: channels.length }
         ]);
+    }
+
+    function countSearchRows(rows) {
+        var total = 0;
+
+        rows.forEach(function (row) {
+            total += row && row.results ? row.results.length : 0;
+        });
+
+        return total;
     }
 
     function mapNativeCard(item) {
@@ -1656,6 +1706,19 @@
     }
 
     function playItem(api, item) {
+        var key = item && item.assetId ? String(item.assetId) : '';
+        var now = Date.now();
+
+        if (key && playRequestLock.key === key && now - playRequestLock.time < 1200) {
+            debugLog('warn', 'play:duplicate-suppressed', {
+                assetId: item.assetId,
+                title: item.title || ''
+            });
+            return Promise.resolve();
+        }
+
+        playRequestLock = { key: key, time: now };
+
         notify('Resolving stream...');
         debugLog('info', 'play:resolve:start', {
             assetId: item.assetId,

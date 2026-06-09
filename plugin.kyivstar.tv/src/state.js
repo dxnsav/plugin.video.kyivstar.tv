@@ -1,4 +1,4 @@
-    var PLUGIN_BUILD = '2026-06-09-native-only-source';
+    var PLUGIN_BUILD = '2026-06-09-native-full-search-fixes';
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
     var TITLE = 'Kyivstar TV';
@@ -19,6 +19,7 @@
     var searchSourceAdded = false;
     var apiSourceAdded = false;
     var fullPlayerHookAdded = false;
+    var playRequestLock = { key: '', time: 0 };
 
     var KEYS = {
         loginType: 'kyivstar_login_type',

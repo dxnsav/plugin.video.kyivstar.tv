@@ -63,6 +63,19 @@
     }
 
     function playItem(api, item) {
+        var key = item && item.assetId ? String(item.assetId) : '';
+        var now = Date.now();
+
+        if (key && playRequestLock.key === key && now - playRequestLock.time < 1200) {
+            debugLog('warn', 'play:duplicate-suppressed', {
+                assetId: item.assetId,
+                title: item.title || ''
+            });
+            return Promise.resolve();
+        }
+
+        playRequestLock = { key: key, time: now };
+
         notify('Resolving stream...');
         debugLog('info', 'play:resolve:start', {
             assetId: item.assetId,

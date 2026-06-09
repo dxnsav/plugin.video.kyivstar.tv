@@ -1,8 +1,10 @@
     function createSearchSource() {
         var api = new KyivstarApi();
+        var source;
 
-        return {
+        source = {
             title: TITLE,
+            count: 0,
             params: {
                 lazy: true,
                 save: false,
@@ -16,12 +18,25 @@
 
                 api.search(query).then(function (results) {
                     var rows = buildNativeSearchRows(results || []);
+                    var count = countSearchRows(rows);
+
+                    source.count = count;
+                    source.results_count = count;
+                    source.total_results = count;
+
                     debugLog('info', 'search:native:ok', {
                         query: query,
-                        rows: rows.length
+                        rows: rows.length,
+                        count: count
                     });
+                    rows.count = count;
+                    rows.results_count = count;
+                    rows.total_results = count;
                     done(rows);
                 }).catch(function (error) {
+                    source.count = 0;
+                    source.results_count = 0;
+                    source.total_results = 0;
                     debugLog('error', 'search:native:error', {
                         query: query,
                         error: error.message || String(error),
@@ -39,6 +54,8 @@
                 api.clear();
             }
         };
+
+        return source;
     }
 
     function buildNativeSearchRows(results) {
@@ -57,9 +74,19 @@
         });
 
         return buildRows([
-            { title: 'Videos', type: 'movie', results: videos },
-            { title: 'Live TV', type: 'channel', results: channels }
+            { title: 'Videos', type: 'movie', results: videos, count: videos.length, total_results: videos.length },
+            { title: 'Live TV', type: 'channel', results: channels, count: channels.length, total_results: channels.length }
         ]);
+    }
+
+    function countSearchRows(rows) {
+        var total = 0;
+
+        rows.forEach(function (row) {
+            total += row && row.results ? row.results.length : 0;
+        });
+
+        return total;
     }
 
     function mapNativeCard(item) {
