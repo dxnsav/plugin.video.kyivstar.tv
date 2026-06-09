@@ -9,11 +9,22 @@ npm run build:lampa
 npm run check:lampa
 ```
 
-The build script concatenates files in the explicit order listed in `scripts/build-lampa-plugin.js` and wraps them in one IIFE.
+The build script reads `plugin.kyivstar.tv/i18n/*.json`, inlines those dictionaries into `main.js`, concatenates files in the explicit order listed in `scripts/build-lampa-plugin.js`, and wraps everything in one IIFE.
+
+## Localization
+
+User-facing strings live in:
+
+- `plugin.kyivstar.tv/i18n/en.json`
+- `plugin.kyivstar.tv/i18n/ru.json`
+- `plugin.kyivstar.tv/i18n/uk.json`
+
+Use `t('key')` in source files. Keep the same keys in every locale file. Lampa still loads one built `main.js`; there are no runtime locale fetches.
 
 ## File map
 
 - `state.js` - constants, shared state, storage keys.
+- `i18n.js` - locale detection and dictionary lookup.
 - `bootstrap.js` - startup flow and plugin initialization.
 - `settings-registration.js` - Lampa settings registration.
 - `lampa-integration.js` - menu, activity and global Lampa integration.

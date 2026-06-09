@@ -134,7 +134,7 @@
         if (!item) return;
 
         if (item.locked) {
-            notify(t({ uk: 'Цей елемент недоступний для поточного акаунта.', ru: 'Этот элемент недоступен для текущего аккаунта.', en: 'This item is not available for the current account.' }));
+            notify(t('item_unavailable'));
             return;
         }
 
@@ -172,7 +172,7 @@
             return;
         }
 
-        notify(t({ uk: 'Lampa full card API недоступний.', ru: 'Lampa full card API недоступен.', en: 'Lampa full card API is not available.' }));
+        notify(t('full_card_api_unavailable'));
     }
 
     function showMainMenu(attempt) {
@@ -196,5 +196,5 @@
             return;
         }
 
-        notify('Kyivstar TV native source is not ready yet.');
+        notify(t('source_not_ready'));
     }

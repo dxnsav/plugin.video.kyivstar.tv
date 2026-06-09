@@ -205,47 +205,6 @@
         return parts.join('&');
     }
 
-    function t(values) {
-        var lang = lampaLanguage();
-        return values[lang] || values.uk || values.en || values.ru || '';
-    }
-
-    function lampaLanguage() {
-        var lang = '';
-        var candidates = [
-            safeStorage('language'),
-            safeStorage('lang'),
-            safeStorage('language_app'),
-            safeStorage('interface_language'),
-            Lampa.Lang && (Lampa.Lang.lang || Lampa.Lang.code || Lampa.Lang.language),
-            setting(KEYS.locale)
-        ];
-
-        for (var i = 0; i < candidates.length; i++) {
-            lang = normalizeLanguage(candidates[i]);
-            if (lang) return lang;
-        }
-
-        return 'uk';
-    }
-
-    function safeStorage(key) {
-        try {
-            return Lampa.Storage ? Lampa.Storage.get(key, '') : '';
-        } catch (error) {
-            return '';
-        }
-    }
-
-    function normalizeLanguage(value) {
-        value = String(value || '').toLowerCase();
-        if (!value) return '';
-        if (value.indexOf('uk') === 0 || value.indexOf('ua') === 0) return 'uk';
-        if (value.indexOf('ru') === 0) return 'ru';
-        if (value.indexOf('en') === 0) return 'en';
-        return '';
-    }
-
     function brandIconHtml() {
         return '<img src="' + ASSET_BASE + 'favicon.ico" alt="' + TITLE + '" style="width:1.35em;height:1.35em;object-fit:contain;display:block;">';
     }

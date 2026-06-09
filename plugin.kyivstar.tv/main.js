@@ -1,6 +1,192 @@
 (function () {
     'use strict';
 
+    var I18N = {
+        "en": {
+            "login_type": "Login type",
+            "login_type_description": "Anonymous supports free channels. Personal account and phone OTP require an active Kyivstar TV account.",
+            "login_anonymous": "Anonymous",
+            "login_account": "Personal account",
+            "login_phone_otp": "Phone OTP",
+            "personal_account": "Personal account",
+            "personal_account_description": "Used only when login type is Personal account.",
+            "password": "Password",
+            "password_description": "Stored locally by Lampa.",
+            "phone_number": "Phone number",
+            "phone_description": "Used only when login type is Phone OTP.",
+            "sms_code": "SMS code",
+            "sms_code_description": "Enter the SMS code here, then use Refresh session.",
+            "locale": "Locale",
+            "locale_description": "Language sent to Kyivstar TV API.",
+            "language_uk": "Ukrainian",
+            "language_en": "English",
+            "language_ru": "Russian",
+            "cors_proxy_description": "Optional self-hosted proxy. Use {url} as the encoded target URL placeholder.",
+            "append_stream_headers": "Append stream headers",
+            "append_stream_headers_description": "Adds Referer and User-Agent metadata to resolved HLS URLs.",
+            "send_sms_code_now": "Send SMS code now",
+            "send_sms_code_description": "Requests a phone OTP for the saved phone number.",
+            "refresh_session": "Refresh session",
+            "refresh_session_description": "Re-login with the selected login type.",
+            "diagnostics_logs": "Diagnostics / logs",
+            "diagnostics_logs_description": "Open Kyivstar TV request logs.",
+            "clear_phone_otp_state": "Clear phone OTP state",
+            "clear_phone_otp_description": "Clears pending anonymous phone session and SMS code.",
+            "logout_clear_session": "Log out / clear session",
+            "logout_clear_session_description": "Clears local Kyivstar TV session and cache.",
+            "phone_otp_cleared": "Kyivstar TV phone OTP state cleared.",
+            "lampa_select_unavailable": "Lampa Select API is not available.",
+            "settings_suffix": "settings",
+            "filled_set": "set",
+            "filled_empty": "empty",
+            "yes": "On",
+            "no": "Off",
+            "set_phone_first": "Set phone number first.",
+            "sending_sms_code": "Sending SMS code...",
+            "sms_code_request_sent": "SMS code request sent. Check your phone.",
+            "print_logs_console": "Print logs to console",
+            "clear_logs": "Clear logs",
+            "diagnostics_suffix": "diagnostics",
+            "logs_printed_console": "Kyivstar TV logs printed to console.",
+            "session_refreshed": "Kyivstar TV session refreshed.",
+            "session_cleared": "Kyivstar TV session cleared.",
+            "resolving_stream": "Resolving stream...",
+            "item_not_playable": "Kyivstar TV item is not playable.",
+            "item_unavailable": "This item is not available for the current account.",
+            "season_prefix": "Season ",
+            "no_playable_episodes": "No playable episodes found.",
+            "episodes": "Episodes",
+            "episode_prefix": "Episode ",
+            "full_card_api_unavailable": "Lampa full card API is not available.",
+            "source_not_ready": "Kyivstar TV native source is not ready yet.",
+            "account_password_required": "Set personal account and password in Kyivstar TV settings.",
+            "phone_required": "Set phone number in Kyivstar TV settings.",
+            "sms_sent_enter_refresh": "SMS code sent. Enter it in Kyivstar TV settings, then refresh the session."
+        },
+        "ru": {
+            "login_type": "Тип входа",
+            "login_type_description": "Anonymous открывает бесплатные каналы. Лицевой счет и телефонный OTP требуют активный аккаунт Kyivstar TV.",
+            "login_anonymous": "Anonymous",
+            "login_account": "Лицевой счет",
+            "login_phone_otp": "Телефонный OTP",
+            "personal_account": "Лицевой счет",
+            "personal_account_description": "Используется только для входа через лицевой счет.",
+            "password": "Пароль",
+            "password_description": "Хранится локально в Lampa.",
+            "phone_number": "Номер телефона",
+            "phone_description": "Используется только для входа через телефонный OTP.",
+            "sms_code": "SMS-код",
+            "sms_code_description": "Введите SMS-код здесь, затем нажмите «Обновить сессию».",
+            "locale": "Язык",
+            "locale_description": "Язык, который плагин передает в Kyivstar TV API.",
+            "language_uk": "Украинский",
+            "language_en": "Английский",
+            "language_ru": "Русский",
+            "cors_proxy_description": "Опциональный свой proxy. Используйте {url} как placeholder для закодированного URL.",
+            "append_stream_headers": "Добавлять stream headers",
+            "append_stream_headers_description": "Добавляет Referer и User-Agent к HLS URL.",
+            "send_sms_code_now": "Отправить SMS-код",
+            "send_sms_code_description": "Запрашивает телефонный OTP для сохраненного номера.",
+            "refresh_session": "Обновить сессию",
+            "refresh_session_description": "Повторный вход с выбранным типом логина.",
+            "diagnostics_logs": "Диагностика / логи",
+            "diagnostics_logs_description": "Открыть логи запросов Kyivstar TV.",
+            "clear_phone_otp_state": "Очистить состояние телефонного OTP",
+            "clear_phone_otp_description": "Очищает pending anonymous phone session и SMS-код.",
+            "logout_clear_session": "Выйти / очистить сессию",
+            "logout_clear_session_description": "Очищает локальную сессию Kyivstar TV и cache.",
+            "phone_otp_cleared": "Состояние телефонного OTP очищено.",
+            "lampa_select_unavailable": "Lampa Select API недоступен.",
+            "settings_suffix": "настройки",
+            "filled_set": "заполнено",
+            "filled_empty": "пусто",
+            "yes": "Да",
+            "no": "Нет",
+            "set_phone_first": "Сначала укажите номер телефона.",
+            "sending_sms_code": "Отправляю SMS-код...",
+            "sms_code_request_sent": "SMS-код запрошен. Проверьте телефон.",
+            "print_logs_console": "Вывести логи в консоль",
+            "clear_logs": "Очистить логи",
+            "diagnostics_suffix": "диагностика",
+            "logs_printed_console": "Логи Kyivstar TV выведены в консоль.",
+            "session_refreshed": "Сессия Kyivstar TV обновлена.",
+            "session_cleared": "Сессия Kyivstar TV очищена.",
+            "resolving_stream": "Получаю поток...",
+            "item_not_playable": "Этот элемент Kyivstar TV нельзя воспроизвести.",
+            "item_unavailable": "Этот элемент недоступен для текущего аккаунта.",
+            "season_prefix": "Сезон ",
+            "no_playable_episodes": "Не найдены доступные эпизоды.",
+            "episodes": "Эпизоды",
+            "episode_prefix": "Эпизод ",
+            "full_card_api_unavailable": "Lampa full card API недоступен.",
+            "source_not_ready": "Нативный источник Kyivstar TV еще недоступен.",
+            "account_password_required": "Укажите лицевой счет и пароль в настройках Kyivstar TV.",
+            "phone_required": "Укажите номер телефона в настройках Kyivstar TV.",
+            "sms_sent_enter_refresh": "SMS-код отправлен. Введите его в настройках Kyivstar TV и обновите сессию."
+        },
+        "uk": {
+            "login_type": "Тип входу",
+            "login_type_description": "Anonymous відкриває безкоштовні канали. Особовий рахунок і телефонний OTP потребують активного акаунта Kyivstar TV.",
+            "login_anonymous": "Anonymous",
+            "login_account": "Особовий рахунок",
+            "login_phone_otp": "Телефонний OTP",
+            "personal_account": "Особовий рахунок",
+            "personal_account_description": "Використовується тільки для входу через особовий рахунок.",
+            "password": "Пароль",
+            "password_description": "Зберігається локально в Lampa.",
+            "phone_number": "Номер телефону",
+            "phone_description": "Використовується тільки для входу через телефонний OTP.",
+            "sms_code": "SMS-код",
+            "sms_code_description": "Введіть SMS-код тут, потім натисніть «Оновити сесію».",
+            "locale": "Мова",
+            "locale_description": "Мова, яку плагін передає в Kyivstar TV API.",
+            "language_uk": "Українська",
+            "language_en": "Англійська",
+            "language_ru": "Російська",
+            "cors_proxy_description": "Опційний власний proxy. Використовуйте {url} як placeholder для закодованого URL.",
+            "append_stream_headers": "Додавати stream headers",
+            "append_stream_headers_description": "Додає Referer і User-Agent до HLS URL.",
+            "send_sms_code_now": "Надіслати SMS-код",
+            "send_sms_code_description": "Запитує телефонний OTP для збереженого номера.",
+            "refresh_session": "Оновити сесію",
+            "refresh_session_description": "Повторний вхід з обраним типом логіну.",
+            "diagnostics_logs": "Діагностика / логи",
+            "diagnostics_logs_description": "Відкрити логи запитів Kyivstar TV.",
+            "clear_phone_otp_state": "Очистити стан телефонного OTP",
+            "clear_phone_otp_description": "Очищає pending anonymous phone session і SMS-код.",
+            "logout_clear_session": "Вийти / очистити сесію",
+            "logout_clear_session_description": "Очищає локальну сесію Kyivstar TV і cache.",
+            "phone_otp_cleared": "Стан телефонного OTP очищено.",
+            "lampa_select_unavailable": "Lampa Select API недоступний.",
+            "settings_suffix": "налаштування",
+            "filled_set": "заповнено",
+            "filled_empty": "порожньо",
+            "yes": "Так",
+            "no": "Ні",
+            "set_phone_first": "Спочатку вкажіть номер телефону.",
+            "sending_sms_code": "Надсилаю SMS-код...",
+            "sms_code_request_sent": "SMS-код запитано. Перевірте телефон.",
+            "print_logs_console": "Вивести логи в консоль",
+            "clear_logs": "Очистити логи",
+            "diagnostics_suffix": "діагностика",
+            "logs_printed_console": "Логи Kyivstar TV виведено в консоль.",
+            "session_refreshed": "Сесію Kyivstar TV оновлено.",
+            "session_cleared": "Сесію Kyivstar TV очищено.",
+            "resolving_stream": "Отримую потік...",
+            "item_not_playable": "Цей елемент Kyivstar TV не можна відтворити.",
+            "item_unavailable": "Цей елемент недоступний для поточного акаунта.",
+            "season_prefix": "Сезон ",
+            "no_playable_episodes": "Не знайдено доступних епізодів.",
+            "episodes": "Епізоди",
+            "episode_prefix": "Епізод ",
+            "full_card_api_unavailable": "Lampa full card API недоступний.",
+            "source_not_ready": "Нативне джерело Kyivstar TV ще недоступне.",
+            "account_password_required": "Вкажіть особовий рахунок і пароль у налаштуваннях Kyivstar TV.",
+            "phone_required": "Вкажіть номер телефону в налаштуваннях Kyivstar TV.",
+            "sms_sent_enter_refresh": "SMS-код надіслано. Введіть його в налаштуваннях Kyivstar TV і оновіть сесію."
+        }
+    };
+
     // state.js
     var PLUGIN_BUILD = '2026-06-09-native-full-search-fixes';
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
@@ -56,6 +242,57 @@
     DEFAULTS[KEYS.pendingPhoneSession] = null;
     DEFAULTS[KEYS.cacheKeys] = [];
     DEFAULTS[KEYS.logs] = [];
+
+    // i18n.js
+    function t(key, params) {
+        var lang = lampaLanguage();
+        var value = I18N[lang] && I18N[lang][key] ? I18N[lang][key] : '';
+
+        if (!value && I18N.uk && I18N.uk[key]) value = I18N.uk[key];
+        if (!value && I18N.en && I18N.en[key]) value = I18N.en[key];
+        if (!value) value = key;
+
+        params = params || {};
+        return String(value).replace(/\{([^}]+)\}/g, function (match, name) {
+            return Object.prototype.hasOwnProperty.call(params, name) ? params[name] : match;
+        });
+    }
+
+    function lampaLanguage() {
+        var lang = '';
+        var candidates = [
+            safeStorage('language'),
+            safeStorage('lang'),
+            safeStorage('language_app'),
+            safeStorage('interface_language'),
+            Lampa.Lang && (Lampa.Lang.lang || Lampa.Lang.code || Lampa.Lang.language),
+            setting(KEYS.locale)
+        ];
+
+        for (var i = 0; i < candidates.length; i++) {
+            lang = normalizeLanguage(candidates[i]);
+            if (lang) return lang;
+        }
+
+        return 'uk';
+    }
+
+    function safeStorage(key) {
+        try {
+            return Lampa.Storage ? Lampa.Storage.get(key, '') : '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function normalizeLanguage(value) {
+        value = String(value || '').toLowerCase();
+        if (!value) return '';
+        if (value.indexOf('uk') === 0 || value.indexOf('ua') === 0) return 'uk';
+        if (value.indexOf('ru') === 0) return 'ru';
+        if (value.indexOf('en') === 0) return 'en';
+        return '';
+    }
 
     // bootstrap.js
     function boot() {
@@ -214,40 +451,36 @@
                     phone: loginTypeTitle('phone')
                 },
                 default: DEFAULTS[KEYS.loginType]
-            }, textLoginType(), t({
-                uk: 'Anonymous відкриває безкоштовні канали. Особовий рахунок і телефонний OTP потребують активного акаунта Kyivstar TV.',
-                ru: 'Anonymous открывает бесплатные каналы. Лицевой счет и телефонный OTP требуют активный аккаунт Kyivstar TV.',
-                en: 'Anonymous supports free channels. Personal account and phone OTP require an active Kyivstar TV account.'
-            }));
+            }, textLoginType(), t('login_type_description'));
 
-            addParam({ name: KEYS.username, type: 'input', default: '' }, t({ uk: 'Особовий рахунок', ru: 'Лицевой счет', en: 'Personal account' }), t({ uk: 'Використовується тільки для входу через особовий рахунок.', ru: 'Используется только для входа через лицевой счет.', en: 'Used only when login type is Personal account.' }), clearSession);
-            addParam({ name: KEYS.password, type: 'input', default: '', password: true }, t({ uk: 'Пароль', ru: 'Пароль', en: 'Password' }), t({ uk: 'Зберігається локально в Lampa.', ru: 'Хранится локально в Lampa.', en: 'Stored locally by Lampa.' }), clearSession);
-            addParam({ name: KEYS.phone, type: 'input', default: '' }, t({ uk: 'Номер телефону', ru: 'Номер телефона', en: 'Phone number' }), t({ uk: 'Використовується тільки для входу через телефонний OTP.', ru: 'Используется только для входа через телефонный OTP.', en: 'Used only when login type is Phone OTP.' }), clearSession);
-            addParam({ name: KEYS.otp, type: 'input', default: '' }, t({ uk: 'SMS-код', ru: 'SMS-код', en: 'SMS code' }), t({ uk: 'Введіть SMS-код тут, потім натисніть «Оновити сесію».', ru: 'Введите SMS-код здесь, затем нажмите «Обновить сессию».', en: 'Enter the SMS code here, then use Refresh session.' }));
+            addParam({ name: KEYS.username, type: 'input', default: '' }, t('personal_account'), t('personal_account_description'), clearSession);
+            addParam({ name: KEYS.password, type: 'input', default: '', password: true }, t('password'), t('password_description'), clearSession);
+            addParam({ name: KEYS.phone, type: 'input', default: '' }, t('phone_number'), t('phone_description'), clearSession);
+            addParam({ name: KEYS.otp, type: 'input', default: '' }, t('sms_code'), t('sms_code_description'));
             addParam({
                 name: KEYS.locale,
                 type: 'select',
-                values: { uk_UA: t({ uk: 'Українська', ru: 'Украинский', en: 'Ukrainian' }), en_US: t({ uk: 'Англійська', ru: 'Английский', en: 'English' }), ru_RU: t({ uk: 'Російська', ru: 'Русский', en: 'Russian' }) },
+                values: { uk_UA: t('language_uk'), en_US: t('language_en'), ru_RU: t('language_ru') },
                 default: DEFAULT_LOCALE
-            }, t({ uk: 'Мова', ru: 'Язык', en: 'Locale' }), t({ uk: 'Мова, яку плагін передає в Kyivstar TV API.', ru: 'Язык, который плагин передает в Kyivstar TV API.', en: 'Language sent to Kyivstar TV API.' }), clearSession);
-            addParam({ name: KEYS.proxy, type: 'input', default: '' }, 'CORS proxy', t({ uk: 'Опційний власний proxy. Використовуйте {url} як placeholder для закодованого URL.', ru: 'Опциональный свой proxy. Используйте {url} как placeholder для закодированного URL.', en: 'Optional self-hosted proxy. Use {url} as the encoded target URL placeholder.' }));
-            addParam({ name: KEYS.appendHeaders, type: 'trigger', default: true }, t({ uk: 'Додавати stream headers', ru: 'Добавлять stream headers', en: 'Append stream headers' }), t({ uk: 'Додає Referer і User-Agent до HLS URL.', ru: 'Добавляет Referer и User-Agent к HLS URL.', en: 'Adds Referer and User-Agent metadata to resolved HLS URLs.' }));
-            addParam({ name: 'kyivstar_send_sms', type: 'button' }, t({ uk: 'Надіслати SMS-код', ru: 'Отправить SMS-код', en: 'Send SMS code now' }), t({ uk: 'Запитує телефонний OTP для збереженого номера.', ru: 'Запрашивает телефонный OTP для сохраненного номера.', en: 'Requests a phone OTP for the saved phone number.' }), function () {
+            }, t('locale'), t('locale_description'), clearSession);
+            addParam({ name: KEYS.proxy, type: 'input', default: '' }, 'CORS proxy', t('cors_proxy_description'));
+            addParam({ name: KEYS.appendHeaders, type: 'trigger', default: true }, t('append_stream_headers'), t('append_stream_headers_description'));
+            addParam({ name: 'kyivstar_send_sms', type: 'button' }, t('send_sms_code_now'), t('send_sms_code_description'), function () {
                 sendSmsCode(new KyivstarApi());
             });
-            addParam({ name: 'kyivstar_refresh_session', type: 'button' }, textRefreshSession(), t({ uk: 'Повторний вхід з обраним типом логіну.', ru: 'Повторный вход с выбранным типом логина.', en: 'Re-login with the selected login type.' }), function () {
+            addParam({ name: 'kyivstar_refresh_session', type: 'button' }, textRefreshSession(), t('refresh_session_description'), function () {
                 refreshSession(new KyivstarApi());
             });
-            addParam({ name: 'kyivstar_diagnostics', type: 'button' }, t({ uk: 'Діагностика / логи', ru: 'Диагностика / логи', en: 'Diagnostics / logs' }), t({ uk: 'Відкрити логи запитів Kyivstar TV.', ru: 'Открыть логи запросов Kyivstar TV.', en: 'Open Kyivstar TV request logs.' }), function () {
+            addParam({ name: 'kyivstar_diagnostics', type: 'button' }, t('diagnostics_logs'), t('diagnostics_logs_description'), function () {
                 showDiagnosticsMenu(settingsBack);
             });
-            addParam({ name: 'kyivstar_clear_phone', type: 'button' }, t({ uk: 'Очистити стан телефонного OTP', ru: 'Очистить состояние телефонного OTP', en: 'Clear phone OTP state' }), t({ uk: 'Очищає pending anonymous phone session і SMS-код.', ru: 'Очищает pending anonymous phone session и SMS-код.', en: 'Clears pending anonymous phone session and SMS code.' }), function () {
+            addParam({ name: 'kyivstar_clear_phone', type: 'button' }, t('clear_phone_otp_state'), t('clear_phone_otp_description'), function () {
                 saveSetting(KEYS.pendingPhoneSession, null);
                 saveSetting(KEYS.otp, '');
                 debugLog('info', 'auth:phone:state-cleared', {});
-                notify(t({ uk: 'Стан телефонного OTP очищено.', ru: 'Состояние телефонного OTP очищено.', en: 'Kyivstar TV phone OTP state cleared.' }));
+                notify(t('phone_otp_cleared'));
             });
-            addParam({ name: 'kyivstar_logout', type: 'button' }, t({ uk: 'Вийти / очистити сесію', ru: 'Выйти / очистить сессию', en: 'Log out / clear session' }), t({ uk: 'Очищає локальну сесію Kyivstar TV і cache.', ru: 'Очищает локальную сессию Kyivstar TV и cache.', en: 'Clears local Kyivstar TV session and cache.' }), function () {
+            addParam({ name: 'kyivstar_logout', type: 'button' }, t('logout_clear_session'), t('logout_clear_session_description'), function () {
                 logout(new KyivstarApi());
             });
 
@@ -572,12 +805,12 @@
 
     function playKyivstarFromFullButton(item) {
         if (!item || !item.assetId) {
-            notify(t({ uk: 'Цей елемент Kyivstar TV не можна відтворити.', ru: 'Этот элемент Kyivstar TV нельзя воспроизвести.', en: 'Kyivstar TV item is not playable.' }));
+            notify(t('item_not_playable'));
             return;
         }
 
         if (item.locked) {
-            notify(t({ uk: 'Цей елемент недоступний для поточного акаунта.', ru: 'Этот элемент недоступен для текущего аккаунта.', en: 'This item is not available for the current account.' }));
+            notify(t('item_unavailable'));
             return;
         }
 
@@ -644,7 +877,7 @@
             items: seasons.map(function (season) {
                 var number = seasonNumber(season);
                 return {
-                    title: t({ uk: 'Сезон ', ru: 'Сезон ', en: 'Season ' }) + number,
+                    title: t('season_prefix') + number,
                     season: number
                 };
             }),
@@ -671,7 +904,7 @@
             });
 
             if (!mapped.length) {
-                notify(t({ uk: 'Не знайдено доступних епізодів.', ru: 'Не найдены доступные эпизоды.', en: 'No playable episodes found.' }));
+                notify(t('no_playable_episodes'));
                 return;
             }
 
@@ -681,10 +914,10 @@
             }
 
             Lampa.Select.show({
-                title: item.title || t({ uk: 'Епізоди', ru: 'Эпизоды', en: 'Episodes' }),
+                title: item.title || t('episodes'),
                 items: mapped.map(function (episode, index) {
                     return {
-                        title: episode.title || (t({ uk: 'Епізод ', ru: 'Эпизод ', en: 'Episode ' }) + (index + 1)),
+                        title: episode.title || (t('episode_prefix') + (index + 1)),
                         subtitle: episode.subtitle || '',
                         episode: episode
                     };
@@ -1083,7 +1316,7 @@
         if (!item) return;
 
         if (item.locked) {
-            notify(t({ uk: 'Цей елемент недоступний для поточного акаунта.', ru: 'Этот элемент недоступен для текущего аккаунта.', en: 'This item is not available for the current account.' }));
+            notify(t('item_unavailable'));
             return;
         }
 
@@ -1121,7 +1354,7 @@
             return;
         }
 
-        notify(t({ uk: 'Lampa full card API недоступний.', ru: 'Lampa full card API недоступен.', en: 'Lampa full card API is not available.' }));
+        notify(t('full_card_api_unavailable'));
     }
 
     function showMainMenu(attempt) {
@@ -1145,7 +1378,7 @@
             return;
         }
 
-        notify('Kyivstar TV native source is not ready yet.');
+        notify(t('source_not_ready'));
     }
 
     // settings-menu.js
@@ -1153,26 +1386,26 @@
         var session = setting(KEYS.session);
 
         if (!Lampa.Select || !Lampa.Select.show) {
-            notify(t({ uk: 'Lampa Select API недоступний.', ru: 'Lampa Select API недоступен.', en: 'Lampa Select API is not available.' }));
+            notify(t('lampa_select_unavailable'));
             return;
         }
 
         Lampa.Select.show({
-            title: TITLE + ' ' + t({ uk: 'налаштування', ru: 'настройки', en: 'settings' }),
+            title: TITLE + ' ' + t('settings_suffix'),
             items: [
                 { title: textLoginType() + ': ' + loginTypeTitle(setting(KEYS.loginType)), action: 'login-type' },
-                { title: t({ uk: 'Мова', ru: 'Язык', en: 'Locale' }) + ': ' + localeTitle(setting(KEYS.locale)), action: 'locale' },
-                { title: t({ uk: 'Додавати stream headers', ru: 'Добавлять stream headers', en: 'Append stream headers' }) + ': ' + yesNo(boolSetting(KEYS.appendHeaders)), action: 'headers' },
-                { title: t({ uk: 'Особовий рахунок', ru: 'Лицевой счет', en: 'Personal account' }) + ': ' + filled(setting(KEYS.username)), action: 'username' },
-                { title: t({ uk: 'Пароль', ru: 'Пароль', en: 'Password' }) + ': ' + filled(setting(KEYS.password)), action: 'password' },
-                { title: t({ uk: 'Номер телефону', ru: 'Номер телефона', en: 'Phone number' }) + ': ' + filled(setting(KEYS.phone)), action: 'phone' },
-                { title: t({ uk: 'SMS-код', ru: 'SMS-код', en: 'SMS code' }) + ': ' + filled(setting(KEYS.otp)), action: 'otp' },
+                { title: t('locale') + ': ' + localeTitle(setting(KEYS.locale)), action: 'locale' },
+                { title: t('append_stream_headers') + ': ' + yesNo(boolSetting(KEYS.appendHeaders)), action: 'headers' },
+                { title: t('personal_account') + ': ' + filled(setting(KEYS.username)), action: 'username' },
+                { title: t('password') + ': ' + filled(setting(KEYS.password)), action: 'password' },
+                { title: t('phone_number') + ': ' + filled(setting(KEYS.phone)), action: 'phone' },
+                { title: t('sms_code') + ': ' + filled(setting(KEYS.otp)), action: 'otp' },
                 { title: 'CORS proxy: ' + filled(setting(KEYS.proxy)), action: 'proxy' },
-                { title: t({ uk: 'Надіслати SMS-код', ru: 'Отправить SMS-код', en: 'Send SMS code now' }), action: 'send-otp' },
+                { title: t('send_sms_code_now'), action: 'send-otp' },
                 { title: textRefreshSession() + (session && session.userId ? ' (' + session.userId + ')' : ''), action: 'session' },
-                { title: t({ uk: 'Діагностика / логи', ru: 'Диагностика / логи', en: 'Diagnostics / logs' }), action: 'diagnostics' },
-                { title: t({ uk: 'Очистити стан телефонного OTP', ru: 'Очистить состояние телефонного OTP', en: 'Clear phone OTP state' }), action: 'clear-phone' },
-                { title: t({ uk: 'Вийти / очистити сесію', ru: 'Выйти / очистить сессию', en: 'Log out / clear session' }), action: 'logout' }
+                { title: t('diagnostics_logs'), action: 'diagnostics' },
+                { title: t('clear_phone_otp_state'), action: 'clear-phone' },
+                { title: t('logout_clear_session'), action: 'logout' }
             ],
             onSelect: function (item) {
                 if (item.action === 'login-type') selectLoginType(api, onBack);
@@ -1180,10 +1413,10 @@
                 else if (item.action === 'headers') {
                     saveSetting(KEYS.appendHeaders, !boolSetting(KEYS.appendHeaders));
                     showSettingsMenu(api, onBack);
-                } else if (item.action === 'username') editStoredValue(t({ uk: 'Особовий рахунок', ru: 'Лицевой счет', en: 'Personal account' }), KEYS.username, api, onBack);
-                else if (item.action === 'password') editStoredValue(t({ uk: 'Пароль', ru: 'Пароль', en: 'Password' }), KEYS.password, api, onBack);
-                else if (item.action === 'phone') editStoredValue(t({ uk: 'Номер телефону', ru: 'Номер телефона', en: 'Phone number' }), KEYS.phone, api, onBack);
-                else if (item.action === 'otp') editStoredValue(t({ uk: 'SMS-код', ru: 'SMS-код', en: 'SMS code' }), KEYS.otp, api, onBack);
+                } else if (item.action === 'username') editStoredValue(t('personal_account'), KEYS.username, api, onBack);
+                else if (item.action === 'password') editStoredValue(t('password'), KEYS.password, api, onBack);
+                else if (item.action === 'phone') editStoredValue(t('phone_number'), KEYS.phone, api, onBack);
+                else if (item.action === 'otp') editStoredValue(t('sms_code'), KEYS.otp, api, onBack);
                 else if (item.action === 'proxy') editStoredValue('CORS proxy', KEYS.proxy, api, onBack);
                 else if (item.action === 'send-otp') {
                     sendSmsCode(api).then(function () {
@@ -1225,7 +1458,7 @@
     }
 
     function selectLocale(api, onBack) {
-        selectStoredValue(t({ uk: 'Мова', ru: 'Язык', en: 'Locale' }), KEYS.locale, [
+        selectStoredValue(t('locale'), KEYS.locale, [
             { title: localeTitle('uk_UA'), value: 'uk_UA' },
             { title: localeTitle('en_US'), value: 'en_US' },
             { title: localeTitle('ru_RU'), value: 'ru_RU' }
@@ -1271,17 +1504,17 @@
         });
 
         if (!phone) {
-            notify(t({ uk: 'Спочатку вкажіть номер телефону.', ru: 'Сначала укажите номер телефона.', en: 'Set phone number first.' }));
+            notify(t('set_phone_first'));
             debugLog('error', 'otp:manual:no-phone', {});
             return Promise.resolve();
         }
 
-        notify(t({ uk: 'Надсилаю SMS-код...', ru: 'Отправляю SMS-код...', en: 'Sending SMS code...' }));
+        notify(t('sending_sms_code'));
 
         return api.ensurePhonePendingSession().then(function (phoneSession) {
             return api.sendOtp(phoneSession.sessionId, phone);
         }).then(function () {
-            notify(t({ uk: 'SMS-код запитано. Перевірте телефон.', ru: 'SMS-код запрошен. Проверьте телефон.', en: 'SMS code request sent. Check your phone.' }));
+            notify(t('sms_code_request_sent'));
             debugLog('info', 'otp:manual:sent', {
                 phone: maskPhone(phone)
             });
@@ -1298,8 +1531,8 @@
     function showDiagnosticsMenu(onBack) {
         var logs = setting(KEYS.logs) || [];
         var items = [
-            { title: t({ uk: 'Вивести логи в консоль', ru: 'Вывести логи в консоль', en: 'Print logs to console' }) + ' (' + logs.length + ')', action: 'print' },
-            { title: t({ uk: 'Очистити логи', ru: 'Очистить логи', en: 'Clear logs' }), action: 'clear' }
+            { title: t('print_logs_console') + ' (' + logs.length + ')', action: 'print' },
+            { title: t('clear_logs'), action: 'clear' }
         ];
         var start = Math.max(0, logs.length - 35);
 
@@ -1312,12 +1545,12 @@
         }
 
         Lampa.Select.show({
-            title: TITLE + ' ' + t({ uk: 'діагностика', ru: 'диагностика', en: 'diagnostics' }),
+            title: TITLE + ' ' + t('diagnostics_suffix'),
             items: items,
             onSelect: function (item) {
                 if (item.action === 'print') {
                     printDebugLogs();
-                    notify(t({ uk: 'Логи Kyivstar TV виведено в консоль.', ru: 'Логи Kyivstar TV выведены в консоль.', en: 'Kyivstar TV logs printed to console.' }));
+                    notify(t('logs_printed_console'));
                     showDiagnosticsMenu(onBack);
                 } else if (item.action === 'clear') {
                     clearDebugLogs();
@@ -1378,31 +1611,31 @@
     }
 
     function loginTypeTitle(value) {
-        if (value === 'account') return t({ uk: 'Особовий рахунок', ru: 'Лицевой счет', en: 'Personal account' });
-        if (value === 'phone') return t({ uk: 'Телефонний OTP', ru: 'Телефонный OTP', en: 'Phone OTP' });
-        return t({ uk: 'Anonymous', ru: 'Anonymous', en: 'Anonymous' });
+        if (value === 'account') return t('login_account');
+        if (value === 'phone') return t('login_phone_otp');
+        return t('login_anonymous');
     }
 
     function localeTitle(value) {
-        if (value === 'en_US') return t({ uk: 'Англійська', ru: 'Английский', en: 'English' });
-        if (value === 'ru_RU') return t({ uk: 'Російська', ru: 'Русский', en: 'Russian' });
-        return t({ uk: 'Українська', ru: 'Украинский', en: 'Ukrainian' });
+        if (value === 'en_US') return t('language_en');
+        if (value === 'ru_RU') return t('language_ru');
+        return t('language_uk');
     }
 
     function filled(value) {
-        return value ? t({ uk: 'заповнено', ru: 'заполнено', en: 'set' }) : t({ uk: 'порожньо', ru: 'пусто', en: 'empty' });
+        return value ? t('filled_set') : t('filled_empty');
     }
 
     function yesNo(value) {
-        return value ? t({ uk: 'Так', ru: 'Да', en: 'On' }) : t({ uk: 'Ні', ru: 'Нет', en: 'Off' });
+        return value ? t('yes') : t('no');
     }
 
     function textLoginType() {
-        return t({ uk: 'Тип входу', ru: 'Тип входа', en: 'Login type' });
+        return t('login_type');
     }
 
     function textRefreshSession() {
-        return t({ uk: 'Оновити сесію', ru: 'Обновить сессию', en: 'Refresh session' });
+        return t('refresh_session');
     }
 
     // routes-and-mappers.js
@@ -1824,7 +2057,7 @@
         });
 
         return api.ensureSession(true).then(function () {
-            notify(t({ uk: 'Сесію Kyivstar TV оновлено.', ru: 'Сессия Kyivstar TV обновлена.', en: 'Kyivstar TV session refreshed.' }));
+            notify(t('session_refreshed'));
             debugLog('info', 'session:refresh:ok', {
                 userId: setting(KEYS.session) && setting(KEYS.session).userId
             });
@@ -1843,7 +2076,7 @@
         });
 
         return api.logout().then(function () {
-            notify(t({ uk: 'Сесію Kyivstar TV очищено.', ru: 'Сессия Kyivstar TV очищена.', en: 'Kyivstar TV session cleared.' }));
+            notify(t('session_cleared'));
             debugLog('info', 'session:logout:ok', {});
         }).catch(function (error) {
             notify(error.message || String(error));
@@ -1868,7 +2101,7 @@
 
         playRequestLock = { key: key, time: now };
 
-        notify(t({ uk: 'Отримую потік...', ru: 'Получаю поток...', en: 'Resolving stream...' }));
+        notify(t('resolving_stream'));
         debugLog('info', 'play:resolve:start', {
             assetId: item.assetId,
             type: item.videoType,
@@ -2028,7 +2261,7 @@
         var password = setting(KEYS.password);
 
         if (!username || !password) {
-            return Promise.reject(new Error(t({ uk: 'Вкажіть особовий рахунок і пароль у налаштуваннях Kyivstar TV.', ru: 'Укажите лицевой счет и пароль в настройках Kyivstar TV.', en: 'Set personal account and password in Kyivstar TV settings.' })));
+            return Promise.reject(new Error(t('account_password_required')));
         }
 
         return this.loginAnonymous().then(function (anonymous) {
@@ -2055,7 +2288,7 @@
         });
 
         if (!phone) {
-            return Promise.reject(new Error(t({ uk: 'Вкажіть номер телефону в налаштуваннях Kyivstar TV.', ru: 'Укажите номер телефона в настройках Kyivstar TV.', en: 'Set phone number in Kyivstar TV settings.' })));
+            return Promise.reject(new Error(t('phone_required')));
         }
 
         var pendingPromise = this.ensurePhonePendingSession();
@@ -2063,7 +2296,7 @@
         return pendingPromise.then(function (phoneSession) {
             if (!otp) {
                 return self.sendOtp(phoneSession.sessionId, phone).then(function () {
-                    throw new Error(t({ uk: 'SMS-код надіслано. Введіть його в налаштуваннях Kyivstar TV і оновіть сесію.', ru: 'SMS-код отправлен. Введите его в настройках Kyivstar TV и обновите сессию.', en: 'SMS code sent. Enter it in Kyivstar TV settings, then refresh the session.' }));
+                    throw new Error(t('sms_sent_enter_refresh'));
                 });
             }
 
@@ -2705,47 +2938,6 @@
         }
 
         return parts.join('&');
-    }
-
-    function t(values) {
-        var lang = lampaLanguage();
-        return values[lang] || values.uk || values.en || values.ru || '';
-    }
-
-    function lampaLanguage() {
-        var lang = '';
-        var candidates = [
-            safeStorage('language'),
-            safeStorage('lang'),
-            safeStorage('language_app'),
-            safeStorage('interface_language'),
-            Lampa.Lang && (Lampa.Lang.lang || Lampa.Lang.code || Lampa.Lang.language),
-            setting(KEYS.locale)
-        ];
-
-        for (var i = 0; i < candidates.length; i++) {
-            lang = normalizeLanguage(candidates[i]);
-            if (lang) return lang;
-        }
-
-        return 'uk';
-    }
-
-    function safeStorage(key) {
-        try {
-            return Lampa.Storage ? Lampa.Storage.get(key, '') : '';
-        } catch (error) {
-            return '';
-        }
-    }
-
-    function normalizeLanguage(value) {
-        value = String(value || '').toLowerCase();
-        if (!value) return '';
-        if (value.indexOf('uk') === 0 || value.indexOf('ua') === 0) return 'uk';
-        if (value.indexOf('ru') === 0) return 'ru';
-        if (value.indexOf('en') === 0) return 'en';
-        return '';
     }
 
     function brandIconHtml() {

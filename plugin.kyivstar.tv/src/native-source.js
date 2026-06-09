@@ -206,12 +206,12 @@
 
     function playKyivstarFromFullButton(item) {
         if (!item || !item.assetId) {
-            notify(t({ uk: 'Цей елемент Kyivstar TV не можна відтворити.', ru: 'Этот элемент Kyivstar TV нельзя воспроизвести.', en: 'Kyivstar TV item is not playable.' }));
+            notify(t('item_not_playable'));
             return;
         }
 
         if (item.locked) {
-            notify(t({ uk: 'Цей елемент недоступний для поточного акаунта.', ru: 'Этот элемент недоступен для текущего аккаунта.', en: 'This item is not available for the current account.' }));
+            notify(t('item_unavailable'));
             return;
         }
 
@@ -278,7 +278,7 @@
             items: seasons.map(function (season) {
                 var number = seasonNumber(season);
                 return {
-                    title: t({ uk: 'Сезон ', ru: 'Сезон ', en: 'Season ' }) + number,
+                    title: t('season_prefix') + number,
                     season: number
                 };
             }),
@@ -305,7 +305,7 @@
             });
 
             if (!mapped.length) {
-                notify(t({ uk: 'Не знайдено доступних епізодів.', ru: 'Не найдены доступные эпизоды.', en: 'No playable episodes found.' }));
+                notify(t('no_playable_episodes'));
                 return;
             }
 
@@ -315,10 +315,10 @@
             }
 
             Lampa.Select.show({
-                title: item.title || t({ uk: 'Епізоди', ru: 'Эпизоды', en: 'Episodes' }),
+                title: item.title || t('episodes'),
                 items: mapped.map(function (episode, index) {
                     return {
-                        title: episode.title || (t({ uk: 'Епізод ', ru: 'Эпизод ', en: 'Episode ' }) + (index + 1)),
+                        title: episode.title || (t('episode_prefix') + (index + 1)),
                         subtitle: episode.subtitle || '',
                         episode: episode
                     };

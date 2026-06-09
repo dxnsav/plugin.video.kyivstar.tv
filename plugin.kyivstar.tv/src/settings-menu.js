@@ -2,26 +2,26 @@
         var session = setting(KEYS.session);
 
         if (!Lampa.Select || !Lampa.Select.show) {
-            notify(t({ uk: 'Lampa Select API недоступний.', ru: 'Lampa Select API недоступен.', en: 'Lampa Select API is not available.' }));
+            notify(t('lampa_select_unavailable'));
             return;
         }
 
         Lampa.Select.show({
-            title: TITLE + ' ' + t({ uk: 'налаштування', ru: 'настройки', en: 'settings' }),
+            title: TITLE + ' ' + t('settings_suffix'),
             items: [
                 { title: textLoginType() + ': ' + loginTypeTitle(setting(KEYS.loginType)), action: 'login-type' },
-                { title: t({ uk: 'Мова', ru: 'Язык', en: 'Locale' }) + ': ' + localeTitle(setting(KEYS.locale)), action: 'locale' },
-                { title: t({ uk: 'Додавати stream headers', ru: 'Добавлять stream headers', en: 'Append stream headers' }) + ': ' + yesNo(boolSetting(KEYS.appendHeaders)), action: 'headers' },
-                { title: t({ uk: 'Особовий рахунок', ru: 'Лицевой счет', en: 'Personal account' }) + ': ' + filled(setting(KEYS.username)), action: 'username' },
-                { title: t({ uk: 'Пароль', ru: 'Пароль', en: 'Password' }) + ': ' + filled(setting(KEYS.password)), action: 'password' },
-                { title: t({ uk: 'Номер телефону', ru: 'Номер телефона', en: 'Phone number' }) + ': ' + filled(setting(KEYS.phone)), action: 'phone' },
-                { title: t({ uk: 'SMS-код', ru: 'SMS-код', en: 'SMS code' }) + ': ' + filled(setting(KEYS.otp)), action: 'otp' },
+                { title: t('locale') + ': ' + localeTitle(setting(KEYS.locale)), action: 'locale' },
+                { title: t('append_stream_headers') + ': ' + yesNo(boolSetting(KEYS.appendHeaders)), action: 'headers' },
+                { title: t('personal_account') + ': ' + filled(setting(KEYS.username)), action: 'username' },
+                { title: t('password') + ': ' + filled(setting(KEYS.password)), action: 'password' },
+                { title: t('phone_number') + ': ' + filled(setting(KEYS.phone)), action: 'phone' },
+                { title: t('sms_code') + ': ' + filled(setting(KEYS.otp)), action: 'otp' },
                 { title: 'CORS proxy: ' + filled(setting(KEYS.proxy)), action: 'proxy' },
-                { title: t({ uk: 'Надіслати SMS-код', ru: 'Отправить SMS-код', en: 'Send SMS code now' }), action: 'send-otp' },
+                { title: t('send_sms_code_now'), action: 'send-otp' },
                 { title: textRefreshSession() + (session && session.userId ? ' (' + session.userId + ')' : ''), action: 'session' },
-                { title: t({ uk: 'Діагностика / логи', ru: 'Диагностика / логи', en: 'Diagnostics / logs' }), action: 'diagnostics' },
-                { title: t({ uk: 'Очистити стан телефонного OTP', ru: 'Очистить состояние телефонного OTP', en: 'Clear phone OTP state' }), action: 'clear-phone' },
-                { title: t({ uk: 'Вийти / очистити сесію', ru: 'Выйти / очистить сессию', en: 'Log out / clear session' }), action: 'logout' }
+                { title: t('diagnostics_logs'), action: 'diagnostics' },
+                { title: t('clear_phone_otp_state'), action: 'clear-phone' },
+                { title: t('logout_clear_session'), action: 'logout' }
             ],
             onSelect: function (item) {
                 if (item.action === 'login-type') selectLoginType(api, onBack);
@@ -29,10 +29,10 @@
                 else if (item.action === 'headers') {
                     saveSetting(KEYS.appendHeaders, !boolSetting(KEYS.appendHeaders));
                     showSettingsMenu(api, onBack);
-                } else if (item.action === 'username') editStoredValue(t({ uk: 'Особовий рахунок', ru: 'Лицевой счет', en: 'Personal account' }), KEYS.username, api, onBack);
-                else if (item.action === 'password') editStoredValue(t({ uk: 'Пароль', ru: 'Пароль', en: 'Password' }), KEYS.password, api, onBack);
-                else if (item.action === 'phone') editStoredValue(t({ uk: 'Номер телефону', ru: 'Номер телефона', en: 'Phone number' }), KEYS.phone, api, onBack);
-                else if (item.action === 'otp') editStoredValue(t({ uk: 'SMS-код', ru: 'SMS-код', en: 'SMS code' }), KEYS.otp, api, onBack);
+                } else if (item.action === 'username') editStoredValue(t('personal_account'), KEYS.username, api, onBack);
+                else if (item.action === 'password') editStoredValue(t('password'), KEYS.password, api, onBack);
+                else if (item.action === 'phone') editStoredValue(t('phone_number'), KEYS.phone, api, onBack);
+                else if (item.action === 'otp') editStoredValue(t('sms_code'), KEYS.otp, api, onBack);
                 else if (item.action === 'proxy') editStoredValue('CORS proxy', KEYS.proxy, api, onBack);
                 else if (item.action === 'send-otp') {
                     sendSmsCode(api).then(function () {
@@ -74,7 +74,7 @@
     }
 
     function selectLocale(api, onBack) {
-        selectStoredValue(t({ uk: 'Мова', ru: 'Язык', en: 'Locale' }), KEYS.locale, [
+        selectStoredValue(t('locale'), KEYS.locale, [
             { title: localeTitle('uk_UA'), value: 'uk_UA' },
             { title: localeTitle('en_US'), value: 'en_US' },
             { title: localeTitle('ru_RU'), value: 'ru_RU' }
@@ -120,17 +120,17 @@
         });
 
         if (!phone) {
-            notify(t({ uk: 'Спочатку вкажіть номер телефону.', ru: 'Сначала укажите номер телефона.', en: 'Set phone number first.' }));
+            notify(t('set_phone_first'));
             debugLog('error', 'otp:manual:no-phone', {});
             return Promise.resolve();
         }
 
-        notify(t({ uk: 'Надсилаю SMS-код...', ru: 'Отправляю SMS-код...', en: 'Sending SMS code...' }));
+        notify(t('sending_sms_code'));
 
         return api.ensurePhonePendingSession().then(function (phoneSession) {
             return api.sendOtp(phoneSession.sessionId, phone);
         }).then(function () {
-            notify(t({ uk: 'SMS-код запитано. Перевірте телефон.', ru: 'SMS-код запрошен. Проверьте телефон.', en: 'SMS code request sent. Check your phone.' }));
+            notify(t('sms_code_request_sent'));
             debugLog('info', 'otp:manual:sent', {
                 phone: maskPhone(phone)
             });
@@ -147,8 +147,8 @@
     function showDiagnosticsMenu(onBack) {
         var logs = setting(KEYS.logs) || [];
         var items = [
-            { title: t({ uk: 'Вивести логи в консоль', ru: 'Вывести логи в консоль', en: 'Print logs to console' }) + ' (' + logs.length + ')', action: 'print' },
-            { title: t({ uk: 'Очистити логи', ru: 'Очистить логи', en: 'Clear logs' }), action: 'clear' }
+            { title: t('print_logs_console') + ' (' + logs.length + ')', action: 'print' },
+            { title: t('clear_logs'), action: 'clear' }
         ];
         var start = Math.max(0, logs.length - 35);
 
@@ -161,12 +161,12 @@
         }
 
         Lampa.Select.show({
-            title: TITLE + ' ' + t({ uk: 'діагностика', ru: 'диагностика', en: 'diagnostics' }),
+            title: TITLE + ' ' + t('diagnostics_suffix'),
             items: items,
             onSelect: function (item) {
                 if (item.action === 'print') {
                     printDebugLogs();
-                    notify(t({ uk: 'Логи Kyivstar TV виведено в консоль.', ru: 'Логи Kyivstar TV выведены в консоль.', en: 'Kyivstar TV logs printed to console.' }));
+                    notify(t('logs_printed_console'));
                     showDiagnosticsMenu(onBack);
                 } else if (item.action === 'clear') {
                     clearDebugLogs();
@@ -227,29 +227,29 @@
     }
 
     function loginTypeTitle(value) {
-        if (value === 'account') return t({ uk: 'Особовий рахунок', ru: 'Лицевой счет', en: 'Personal account' });
-        if (value === 'phone') return t({ uk: 'Телефонний OTP', ru: 'Телефонный OTP', en: 'Phone OTP' });
-        return t({ uk: 'Anonymous', ru: 'Anonymous', en: 'Anonymous' });
+        if (value === 'account') return t('login_account');
+        if (value === 'phone') return t('login_phone_otp');
+        return t('login_anonymous');
     }
 
     function localeTitle(value) {
-        if (value === 'en_US') return t({ uk: 'Англійська', ru: 'Английский', en: 'English' });
-        if (value === 'ru_RU') return t({ uk: 'Російська', ru: 'Русский', en: 'Russian' });
-        return t({ uk: 'Українська', ru: 'Украинский', en: 'Ukrainian' });
+        if (value === 'en_US') return t('language_en');
+        if (value === 'ru_RU') return t('language_ru');
+        return t('language_uk');
     }
 
     function filled(value) {
-        return value ? t({ uk: 'заповнено', ru: 'заполнено', en: 'set' }) : t({ uk: 'порожньо', ru: 'пусто', en: 'empty' });
+        return value ? t('filled_set') : t('filled_empty');
     }
 
     function yesNo(value) {
-        return value ? t({ uk: 'Так', ru: 'Да', en: 'On' }) : t({ uk: 'Ні', ru: 'Нет', en: 'Off' });
+        return value ? t('yes') : t('no');
     }
 
     function textLoginType() {
-        return t({ uk: 'Тип входу', ru: 'Тип входа', en: 'Login type' });
+        return t('login_type');
     }
 
     function textRefreshSession() {
-        return t({ uk: 'Оновити сесію', ru: 'Обновить сессию', en: 'Refresh session' });
+        return t('refresh_session');
     }
