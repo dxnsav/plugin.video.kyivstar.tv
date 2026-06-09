@@ -32,7 +32,7 @@
         });
 
         return api.ensureSession(true).then(function () {
-            notify('Kyivstar TV session refreshed.');
+            notify(t({ uk: 'Сесію Kyivstar TV оновлено.', ru: 'Сессия Kyivstar TV обновлена.', en: 'Kyivstar TV session refreshed.' }));
             debugLog('info', 'session:refresh:ok', {
                 userId: setting(KEYS.session) && setting(KEYS.session).userId
             });
@@ -51,7 +51,7 @@
         });
 
         return api.logout().then(function () {
-            notify('Kyivstar TV session cleared.');
+            notify(t({ uk: 'Сесію Kyivstar TV очищено.', ru: 'Сессия Kyivstar TV очищена.', en: 'Kyivstar TV session cleared.' }));
             debugLog('info', 'session:logout:ok', {});
         }).catch(function (error) {
             notify(error.message || String(error));
@@ -76,7 +76,7 @@
 
         playRequestLock = { key: key, time: now };
 
-        notify('Resolving stream...');
+        notify(t({ uk: 'Отримую потік...', ru: 'Получаю поток...', en: 'Resolving stream...' }));
         debugLog('info', 'play:resolve:start', {
             assetId: item.assetId,
             type: item.videoType,

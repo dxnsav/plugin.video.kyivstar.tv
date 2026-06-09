@@ -206,12 +206,12 @@
 
     function playKyivstarFromFullButton(item) {
         if (!item || !item.assetId) {
-            notify('Kyivstar TV item is not playable.');
+            notify(t({ uk: 'Цей елемент Kyivstar TV не можна відтворити.', ru: 'Этот элемент Kyivstar TV нельзя воспроизвести.', en: 'Kyivstar TV item is not playable.' }));
             return;
         }
 
         if (item.locked) {
-            notify('This item is not available for the current account.');
+            notify(t({ uk: 'Цей елемент недоступний для поточного акаунта.', ru: 'Этот элемент недоступен для текущего аккаунта.', en: 'This item is not available for the current account.' }));
             return;
         }
 
@@ -239,7 +239,6 @@
     }
 
     function openSeriesEpisodeSelect(api, item) {
-        notify('Loading episodes...');
         debugLog('info', 'full:series:start', {
             assetId: item.assetId || '',
             title: item.title || ''
@@ -279,7 +278,7 @@
             items: seasons.map(function (season) {
                 var number = seasonNumber(season);
                 return {
-                    title: 'Season ' + number,
+                    title: t({ uk: 'Сезон ', ru: 'Сезон ', en: 'Season ' }) + number,
                     season: number
                 };
             }),
@@ -306,7 +305,7 @@
             });
 
             if (!mapped.length) {
-                notify('No playable episodes found.');
+                notify(t({ uk: 'Не знайдено доступних епізодів.', ru: 'Не найдены доступные эпизоды.', en: 'No playable episodes found.' }));
                 return;
             }
 
@@ -316,10 +315,10 @@
             }
 
             Lampa.Select.show({
-                title: item.title || 'Episodes',
+                title: item.title || t({ uk: 'Епізоди', ru: 'Эпизоды', en: 'Episodes' }),
                 items: mapped.map(function (episode, index) {
                     return {
-                        title: episode.title || ('Episode ' + (index + 1)),
+                        title: episode.title || (t({ uk: 'Епізод ', ru: 'Эпизод ', en: 'Episode ' }) + (index + 1)),
                         subtitle: episode.subtitle || '',
                         episode: episode
                     };
@@ -360,7 +359,7 @@
     function createKyivstarFullButton(playButton) {
         var button = $('<div class="full-start__button button selector button--kyivstar-tv">' +
             '<div class="full-start__button-icon">' + iconSvg() + '</div>' +
-            '<div class="full-start__button-name">Kyivstar TV</div>' +
+            '<div class="full-start__button-name">' + brandLogoHtml() + '</div>' +
             '</div>');
 
         if (playButton && playButton.length) {

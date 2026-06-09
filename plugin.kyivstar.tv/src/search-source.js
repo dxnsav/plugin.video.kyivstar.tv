@@ -134,7 +134,7 @@
         if (!item) return;
 
         if (item.locked) {
-            notify('This item is not available for the current account.');
+            notify(t({ uk: 'Цей елемент недоступний для поточного акаунта.', ru: 'Этот элемент недоступен для текущего аккаунта.', en: 'This item is not available for the current account.' }));
             return;
         }
 
@@ -172,7 +172,7 @@
             return;
         }
 
-        notify('Lampa full card API is not available.');
+        notify(t({ uk: 'Lampa full card API недоступний.', ru: 'Lampa full card API недоступен.', en: 'Lampa full card API is not available.' }));
     }
 
     function showMainMenu(attempt) {

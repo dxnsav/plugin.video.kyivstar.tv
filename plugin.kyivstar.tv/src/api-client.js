@@ -120,7 +120,7 @@
         var password = setting(KEYS.password);
 
         if (!username || !password) {
-            return Promise.reject(new Error('Set personal account and password in Kyivstar TV settings.'));
+            return Promise.reject(new Error(t({ uk: 'Вкажіть особовий рахунок і пароль у налаштуваннях Kyivstar TV.', ru: 'Укажите лицевой счет и пароль в настройках Kyivstar TV.', en: 'Set personal account and password in Kyivstar TV settings.' })));
         }
 
         return this.loginAnonymous().then(function (anonymous) {
@@ -147,7 +147,7 @@
         });
 
         if (!phone) {
-            return Promise.reject(new Error('Set phone number in Kyivstar TV settings.'));
+            return Promise.reject(new Error(t({ uk: 'Вкажіть номер телефону в налаштуваннях Kyivstar TV.', ru: 'Укажите номер телефона в настройках Kyivstar TV.', en: 'Set phone number in Kyivstar TV settings.' })));
         }
 
         var pendingPromise = this.ensurePhonePendingSession();
@@ -155,7 +155,7 @@
         return pendingPromise.then(function (phoneSession) {
             if (!otp) {
                 return self.sendOtp(phoneSession.sessionId, phone).then(function () {
-                    throw new Error('SMS code sent. Enter it in Kyivstar TV settings, then refresh the session.');
+                    throw new Error(t({ uk: 'SMS-код надіслано. Введіть його в налаштуваннях Kyivstar TV і оновіть сесію.', ru: 'SMS-код отправлен. Введите его в настройках Kyivstar TV и обновите сессию.', en: 'SMS code sent. Enter it in Kyivstar TV settings, then refresh the session.' }));
                 });
             }
 

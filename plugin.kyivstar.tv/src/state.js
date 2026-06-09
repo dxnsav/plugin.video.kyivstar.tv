@@ -2,6 +2,7 @@
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
     var TITLE = 'Kyivstar TV';
+    var ASSET_BASE = 'https://dxnsav.github.io/plugin.video.kyivstar.tv/plugin.kyivstar.tv/assets/';
     var API_BASE = 'https://clients.production.vidmind.com/vidmind-stb-ws/';
     var AUTH_REALM = '557455cfe4b04ad886a6ae41';
     var DEFAULT_LOCALE = 'uk_UA';

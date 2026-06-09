@@ -205,8 +205,57 @@
         return parts.join('&');
     }
 
+    function t(values) {
+        var lang = lampaLanguage();
+        return values[lang] || values.uk || values.en || values.ru || '';
+    }
+
+    function lampaLanguage() {
+        var lang = '';
+        var candidates = [
+            safeStorage('language'),
+            safeStorage('lang'),
+            safeStorage('language_app'),
+            safeStorage('interface_language'),
+            Lampa.Lang && (Lampa.Lang.lang || Lampa.Lang.code || Lampa.Lang.language),
+            setting(KEYS.locale)
+        ];
+
+        for (var i = 0; i < candidates.length; i++) {
+            lang = normalizeLanguage(candidates[i]);
+            if (lang) return lang;
+        }
+
+        return 'uk';
+    }
+
+    function safeStorage(key) {
+        try {
+            return Lampa.Storage ? Lampa.Storage.get(key, '') : '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function normalizeLanguage(value) {
+        value = String(value || '').toLowerCase();
+        if (!value) return '';
+        if (value.indexOf('uk') === 0 || value.indexOf('ua') === 0) return 'uk';
+        if (value.indexOf('ru') === 0) return 'ru';
+        if (value.indexOf('en') === 0) return 'en';
+        return '';
+    }
+
+    function brandIconHtml() {
+        return '<img src="' + ASSET_BASE + 'favicon.ico" alt="' + TITLE + '" style="width:1.35em;height:1.35em;object-fit:contain;display:block;">';
+    }
+
+    function brandLogoHtml() {
+        return '<img src="' + ASSET_BASE + 'logo-ua.svg" alt="' + TITLE + '" style="width:120px;height:21px;object-fit:contain;display:block;">';
+    }
+
     function iconSvg() {
-        return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+        return brandIconHtml() || '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
             '<rect x="3" y="5" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>' +
             '<path d="M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
             '<path d="M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
