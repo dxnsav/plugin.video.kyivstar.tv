@@ -1191,6 +1191,7 @@
         var runtime = raw.duration ? Math.round(Number(raw.duration) / 60) : 0;
         var description = raw.plot || raw.shortPlot || raw.description || raw.longDescription || raw.shortDescription || raw.overview || '';
         var genres = normalizeGenres(raw);
+        var primaryGenres = genres.length ? [genres[0]] : [];
         var cast = normalizeCrewList(raw.actors || raw.cast, 'cast');
         var directors = normalizeCrewList(raw.directors || raw.director, 'director');
         var keywords = normalizeKeywords(raw);
@@ -1221,9 +1222,7 @@
             vote_count: ratingInfo.votes || 0,
             rating_provider: ratingInfo.provider || TITLE,
             rating_source: ratingInfo.provider || TITLE,
-            imdb_rating: ratingInfo.provider === 'IMDB' ? rating || 0 : 0,
-            imdb_id: ratingInfo.provider === 'IMDB' && ratingInfo.movieId ? 'tt' + String(ratingInfo.movieId).replace(/^tt/, '') : '',
-            genres: genres,
+            genres: primaryGenres,
             production_companies: [],
             production_countries: normalizeProductionCountries(raw),
             keywords: { results: keywords, keywords: keywords },
@@ -1238,12 +1237,9 @@
             kp_rating: 0,
             number_of_episodes: 0,
             number_of_seasons: 0,
-            like_count: likes,
-            dislike_count: dislikes,
-            likes: likes,
-            dislikes: dislikes,
-            reactions: reactions,
             kyivstar_reactions: reactions,
+            kyivstar_genres: genres,
+            kyivstar_rating: ratingInfo,
             tags: keywords,
             poster: image,
             img: image,
@@ -3015,7 +3011,7 @@
     }
 
     function normalizeGenres(raw) {
-        var genres = raw && (raw.genres || raw.genre || raw.categories || raw.category || raw.tags);
+        var genres = raw && (raw.genres || raw.genre || raw.categories || raw.category);
         var list = [];
         var used = {};
 

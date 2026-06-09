@@ -194,7 +194,7 @@
     }
 
     function normalizeGenres(raw) {
-        var genres = raw && (raw.genres || raw.genre || raw.categories || raw.category || raw.tags);
+        var genres = raw && (raw.genres || raw.genre || raw.categories || raw.category);
         var list = [];
         var used = {};
 
