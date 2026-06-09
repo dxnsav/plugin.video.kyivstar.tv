@@ -137,6 +137,41 @@
         return merge(merge({}, route), patch);
     }
 
+    function normalizeProductionCountries(raw) {
+        var countries = raw && (raw.production_countries || raw.productionCountries || raw.countries || raw.country);
+        var list = [];
+
+        if (!countries) return list;
+
+        if (Object.prototype.toString.call(countries) !== '[object Array]') {
+            countries = String(countries).split(/[,/|]/);
+        }
+
+        countries.forEach(function (country) {
+            var code;
+            var name;
+
+            if (!country) return;
+
+            if (typeof country === 'string') {
+                name = country.trim();
+                code = name.length === 2 ? name.toUpperCase() : '';
+            } else {
+                code = country.iso_3166_1 || country.code || country.iso || '';
+                name = country.name || country.title || country.displayName || code;
+            }
+
+            if (name || code) {
+                list.push({
+                    iso_3166_1: code || name,
+                    name: name || code
+                });
+            }
+        });
+
+        return list;
+    }
+
     function encodeForm(data) {
         var parts = [];
 

@@ -341,6 +341,7 @@
             runtime: runtime || 0,
             vote_average: rating || 0,
             genres: [],
+            production_countries: normalizeProductionCountries(raw),
             poster: image,
             img: image,
             background_image: background,

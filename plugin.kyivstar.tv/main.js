@@ -703,6 +703,7 @@
             runtime: runtime || 0,
             vote_average: rating || 0,
             genres: [],
+            production_countries: normalizeProductionCountries(raw),
             poster: image,
             img: image,
             background_image: background,
@@ -798,6 +799,7 @@
             vote_average: rating,
             poster: item.image || '',
             img: item.image || '',
+            production_countries: normalizeProductionCountries(raw),
             source: COMPONENT,
             method: isSeries ? 'tv' : 'movie',
             videoType: item.videoType || 'VIRTUAL',
@@ -2137,9 +2139,7 @@
                 return self.request('api/v1/gallery/filters/content-group;jsessionid=' + encodeURIComponent(session.sessionId), {
                     method: 'POST',
                     json: {
-                        contentGroupId: groupId,
                         contentGroupElementId: groupId,
-                        contentGroupAssetId: groupId,
                         filterElementIds: filters || [],
                         filterSortElementId: sort,
                         offset: offset || 0,
@@ -2501,6 +2501,41 @@
 
     function copyRoute(route, patch) {
         return merge(merge({}, route), patch);
+    }
+
+    function normalizeProductionCountries(raw) {
+        var countries = raw && (raw.production_countries || raw.productionCountries || raw.countries || raw.country);
+        var list = [];
+
+        if (!countries) return list;
+
+        if (Object.prototype.toString.call(countries) !== '[object Array]') {
+            countries = String(countries).split(/[,/|]/);
+        }
+
+        countries.forEach(function (country) {
+            var code;
+            var name;
+
+            if (!country) return;
+
+            if (typeof country === 'string') {
+                name = country.trim();
+                code = name.length === 2 ? name.toUpperCase() : '';
+            } else {
+                code = country.iso_3166_1 || country.code || country.iso || '';
+                name = country.name || country.title || country.displayName || code;
+            }
+
+            if (name || code) {
+                list.push({
+                    iso_3166_1: code || name,
+                    name: name || code
+                });
+            }
+        });
+
+        return list;
     }
 
     function encodeForm(data) {

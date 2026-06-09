@@ -76,6 +76,7 @@
             vote_average: rating,
             poster: item.image || '',
             img: item.image || '',
+            production_countries: normalizeProductionCountries(raw),
             source: COMPONENT,
             method: isSeries ? 'tv' : 'movie',
             videoType: item.videoType || 'VIRTUAL',

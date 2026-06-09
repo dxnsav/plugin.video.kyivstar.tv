@@ -344,9 +344,7 @@
                 return self.request('api/v1/gallery/filters/content-group;jsessionid=' + encodeURIComponent(session.sessionId), {
                     method: 'POST',
                     json: {
-                        contentGroupId: groupId,
                         contentGroupElementId: groupId,
-                        contentGroupAssetId: groupId,
                         filterElementIds: filters || [],
                         filterSortElementId: sort,
                         offset: offset || 0,
