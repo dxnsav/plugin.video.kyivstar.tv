@@ -159,7 +159,7 @@
     }
 
     function normalizeProductionCountries(raw) {
-        var countries = raw && (raw.production_countries || raw.productionCountries || raw.countries || raw.country);
+        var countries = raw && (raw.production_countries || raw.productionCountries || raw.countryOrigin || raw.countries || raw.country);
         var list = [];
 
         if (!countries) return list;
@@ -215,7 +215,7 @@
             if (typeof genre === 'string') {
                 name = genre.trim();
             } else {
-                name = genre.name || genre.title || genre.displayName || genre.value || '';
+                name = genre.locale || genre.name || genre.title || genre.displayName || genre.value || '';
                 id = genre.id || genre.genreId || genre.assetId || '';
             }
 
@@ -229,6 +229,83 @@
         });
 
         return list;
+    }
+
+    function normalizeCrewList(items, role) {
+        return arrayFromAny(items).map(function (person, index) {
+            var name;
+            var image;
+            var id;
+
+            if (!person) return null;
+
+            if (typeof person === 'string') {
+                name = person;
+                image = '';
+                id = person;
+            } else {
+                name = person.name || person.title || person.displayName || '';
+                image = person.profile_path || person.image || pickImage(person.images) || '';
+                id = person.id || person.assetId || person.slug || name || index;
+            }
+
+            if (!name) return null;
+
+            return {
+                id: id,
+                name: name,
+                original_name: name,
+                profile_path: image,
+                img: image,
+                image: image,
+                character: role === 'cast' && person && person.character ? person.character : '',
+                job: role === 'director' ? 'Director' : (person && person.job ? person.job : ''),
+                known_for_department: role === 'director' ? 'Directing' : 'Acting',
+                department: role === 'director' ? 'Directing' : 'Acting',
+                order: index
+            };
+        }).filter(Boolean);
+    }
+
+    function normalizeKeywords(raw) {
+        var tags = arrayFromAny(raw && (raw.keywords || raw.tags));
+
+        return tags.map(function (tag, index) {
+            var name;
+            var id;
+
+            if (!tag) return null;
+
+            if (typeof tag === 'string') {
+                name = tag;
+                id = tag;
+            } else {
+                name = tag.name || tag.title || tag.displayName || tag.value || '';
+                id = tag.id || tag.keywordId || tag.assetId || name || index;
+            }
+
+            if (!name) return null;
+
+            return {
+                id: id,
+                name: name
+            };
+        }).filter(Boolean);
+    }
+
+    function normalizeRating(raw) {
+        var ratings = arrayFromAny(raw && raw.ratings);
+        var rating = ratings[0] || {};
+        var value = parseFloat(rating.movieRating || rating.rating || raw.vote_average || raw.rating || 0);
+
+        if (isNaN(value)) value = 0;
+
+        return {
+            value: value,
+            provider: rating.ratingProviderType || rating.provider || rating.source || '',
+            votes: Number(rating.numberOfVotes || rating.vote_count || rating.votes || 0) || 0,
+            movieId: rating.movieId || rating.id || ''
+        };
     }
 
     function encodeForm(data) {

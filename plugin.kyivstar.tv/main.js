@@ -786,10 +786,10 @@
             if (!item || movie.source !== COMPONENT || event.type !== 'complite' || !event.body) return;
 
             addKyivstarFullButton(event.body, item);
-            patchKyivstarFullLabels(event.body);
+            patchKyivstarFullLabels(event.body, movie);
             patchDanglingFullSeparators(event.body);
             setTimeout(function () {
-                patchKyivstarFullLabels(event.body);
+                patchKyivstarFullLabels(event.body, movie);
                 patchDanglingFullSeparators(event.body);
             }, 250);
         });
@@ -833,13 +833,14 @@
         });
     }
 
-    function patchKyivstarFullLabels(body) {
+    function patchKyivstarFullLabels(body, movie) {
         var root = $(body);
+        var provider = movie && movie.rating_provider ? movie.rating_provider : TITLE;
 
         root.find('*').contents().each(function () {
             if (this.nodeType !== 3) return;
             if (this.nodeValue && this.nodeValue.indexOf('KYIVSTAR_TV') !== -1) {
-                this.nodeValue = this.nodeValue.replace(/KYIVSTAR_TV/g, TITLE);
+                this.nodeValue = this.nodeValue.replace(/KYIVSTAR_TV/g, provider);
             }
         });
     }
@@ -1185,9 +1186,23 @@
         var background = pickBackdrop(raw.images) || image;
         var release = raw.release_date || raw.releaseDate || item.subtitle || '';
         var date = subtitleYear(release);
-        var rating = itemRating(item);
+        var ratingInfo = normalizeRating(raw);
+        var rating = ratingInfo.value || itemRating(item);
         var runtime = raw.duration ? Math.round(Number(raw.duration) / 60) : 0;
-        var description = raw.description || raw.longDescription || raw.shortDescription || raw.plot || raw.overview || '';
+        var description = raw.plot || raw.shortPlot || raw.description || raw.longDescription || raw.shortDescription || raw.overview || '';
+        var genres = normalizeGenres(raw);
+        var cast = normalizeCrewList(raw.actors || raw.cast, 'cast');
+        var directors = normalizeCrewList(raw.directors || raw.director, 'director');
+        var keywords = normalizeKeywords(raw);
+        var likes = Number(raw.likeCount || raw.likes || 0) || 0;
+        var dislikes = Number(raw.dislikeCount || raw.dislikes || 0) || 0;
+        var reactions = {
+            like: likes,
+            dislike: dislikes,
+            likes: likes,
+            dislikes: dislikes,
+            checkins: Number(raw.checkInCount || 0) || 0
+        };
         var movie = {
             id: item.assetId || item.title || TITLE,
             source: COMPONENT,
@@ -1203,22 +1218,33 @@
             overview: String(description || ''),
             runtime: runtime || 0,
             vote_average: rating || 0,
-            genres: normalizeGenres(raw),
+            vote_count: ratingInfo.votes || 0,
+            rating_provider: ratingInfo.provider || TITLE,
+            rating_source: ratingInfo.provider || TITLE,
+            imdb_rating: ratingInfo.provider === 'IMDB' ? rating || 0 : 0,
+            imdb_id: ratingInfo.provider === 'IMDB' && ratingInfo.movieId ? 'tt' + String(ratingInfo.movieId).replace(/^tt/, '') : '',
+            genres: genres,
             production_companies: [],
             production_countries: normalizeProductionCountries(raw),
-            keywords: { results: [], keywords: [] },
+            keywords: { results: keywords, keywords: keywords },
             videos: { results: [] },
-            credits: { cast: [], crew: [] },
+            credits: { cast: cast, crew: directors },
             images: { posters: [], backdrops: [] },
             alternative_titles: { titles: [] },
             names: [],
-            tagline: '',
+            tagline: raw.tagline || raw.slogan || '',
             budget: 0,
-            status: '',
-            imdb_rating: 0,
+            status: raw.deactivated ? '' : 'Released',
             kp_rating: 0,
             number_of_episodes: 0,
             number_of_seasons: 0,
+            like_count: likes,
+            dislike_count: dislikes,
+            likes: likes,
+            dislikes: dislikes,
+            reactions: reactions,
+            kyivstar_reactions: reactions,
+            tags: keywords,
             poster: image,
             img: image,
             background_image: background,
@@ -2954,7 +2980,7 @@
     }
 
     function normalizeProductionCountries(raw) {
-        var countries = raw && (raw.production_countries || raw.productionCountries || raw.countries || raw.country);
+        var countries = raw && (raw.production_countries || raw.productionCountries || raw.countryOrigin || raw.countries || raw.country);
         var list = [];
 
         if (!countries) return list;
@@ -3010,7 +3036,7 @@
             if (typeof genre === 'string') {
                 name = genre.trim();
             } else {
-                name = genre.name || genre.title || genre.displayName || genre.value || '';
+                name = genre.locale || genre.name || genre.title || genre.displayName || genre.value || '';
                 id = genre.id || genre.genreId || genre.assetId || '';
             }
 
@@ -3024,6 +3050,83 @@
         });
 
         return list;
+    }
+
+    function normalizeCrewList(items, role) {
+        return arrayFromAny(items).map(function (person, index) {
+            var name;
+            var image;
+            var id;
+
+            if (!person) return null;
+
+            if (typeof person === 'string') {
+                name = person;
+                image = '';
+                id = person;
+            } else {
+                name = person.name || person.title || person.displayName || '';
+                image = person.profile_path || person.image || pickImage(person.images) || '';
+                id = person.id || person.assetId || person.slug || name || index;
+            }
+
+            if (!name) return null;
+
+            return {
+                id: id,
+                name: name,
+                original_name: name,
+                profile_path: image,
+                img: image,
+                image: image,
+                character: role === 'cast' && person && person.character ? person.character : '',
+                job: role === 'director' ? 'Director' : (person && person.job ? person.job : ''),
+                known_for_department: role === 'director' ? 'Directing' : 'Acting',
+                department: role === 'director' ? 'Directing' : 'Acting',
+                order: index
+            };
+        }).filter(Boolean);
+    }
+
+    function normalizeKeywords(raw) {
+        var tags = arrayFromAny(raw && (raw.keywords || raw.tags));
+
+        return tags.map(function (tag, index) {
+            var name;
+            var id;
+
+            if (!tag) return null;
+
+            if (typeof tag === 'string') {
+                name = tag;
+                id = tag;
+            } else {
+                name = tag.name || tag.title || tag.displayName || tag.value || '';
+                id = tag.id || tag.keywordId || tag.assetId || name || index;
+            }
+
+            if (!name) return null;
+
+            return {
+                id: id,
+                name: name
+            };
+        }).filter(Boolean);
+    }
+
+    function normalizeRating(raw) {
+        var ratings = arrayFromAny(raw && raw.ratings);
+        var rating = ratings[0] || {};
+        var value = parseFloat(rating.movieRating || rating.rating || raw.vote_average || raw.rating || 0);
+
+        if (isNaN(value)) value = 0;
+
+        return {
+            value: value,
+            provider: rating.ratingProviderType || rating.provider || rating.source || '',
+            votes: Number(rating.numberOfVotes || rating.vote_count || rating.votes || 0) || 0,
+            movieId: rating.movieId || rating.id || ''
+        };
     }
 
     function encodeForm(data) {
