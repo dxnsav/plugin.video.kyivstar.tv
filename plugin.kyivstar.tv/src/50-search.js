@@ -126,16 +126,5 @@
 
     function showMainMenu() {
         addApiSource();
-
-        if (apiSourceAdded && Lampa.Activity && Lampa.Activity.push) {
-            Lampa.Activity.push({
-                title: TITLE,
-                component: 'main',
-                source: COMPONENT,
-                page: 1
-            });
-            return;
-        }
-
         pushRoute({ type: 'home' }, TITLE);
     }

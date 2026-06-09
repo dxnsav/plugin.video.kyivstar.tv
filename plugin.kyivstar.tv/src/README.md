@@ -20,6 +20,7 @@ The build script concatenates `*.js` files in lexicographic order and wraps them
 - `40-native-source.js` - native source/search hooks.
 - `50-search.js` - Kyivstar search UI/data flow.
 - `55-settings-menu.js` - Kyivstar TV settings screen and diagnostics actions.
+- `56-filter-menu.js` - Kyivstar filter and sort menu.
 - `60-custom-component.js` - custom Lampa component and page rendering.
 - `70-routes-mappers.js` - route handlers and asset/card mappers.
 - `80-auth-playback.js` - login/session and playback entry points.

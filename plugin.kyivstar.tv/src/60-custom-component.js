@@ -92,6 +92,7 @@
             items.forEach(function (item) {
                 var card = renderCard(item);
                 if (route.type === 'root') card.addClass('kyivstar-tv-card--root');
+                if (item.kind === 'filter') card.addClass('kyivstar-tv-card--category');
                 grid.append(card);
                 activeItems.push(card);
             });
@@ -136,7 +137,7 @@
 
             if (item.image) {
                 thumb.append($('<img alt="">').attr('src', item.image));
-            } else if (item.kind === 'nav') {
+            } else if (item.kind === 'nav' || item.kind === 'filter') {
                 thumb.append($('<div class="kyivstar-tv-card__fallback kyivstar-tv-card__fallback--icon"></div>').html(item.icon || iconSvg()));
             } else {
                 thumb.append($('<div class="kyivstar-tv-card__fallback"></div>').text((item.title || 'K').slice(0, 2).toUpperCase()));
@@ -201,6 +202,8 @@
                 showDiagnosticsMenu(function () {
                     focusFirst();
                 });
+            } else if (item.kind === 'filter') {
+                showCatalogFilterMenu(route, api);
             } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
                 playItem(api, item);
             }

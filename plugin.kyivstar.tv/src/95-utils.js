@@ -137,6 +137,27 @@
         return merge(merge({}, route), patch);
     }
 
+    function objectValues(object) {
+        var values = [];
+
+        object = object || {};
+        for (var key in object) {
+            if (Object.prototype.hasOwnProperty.call(object, key)) values.push(object[key]);
+        }
+
+        return values;
+    }
+
+    function arrayFromAny(value) {
+        if (!value) return [];
+        if (Object.prototype.toString.call(value) === '[object Array]') return value;
+        if (value.items) return asArray(value.items);
+        if (value.elements) return asArray(value.elements);
+        if (value.values) return asArray(value.values);
+        if (value.options) return asArray(value.options);
+        return asArray(value);
+    }
+
     function normalizeProductionCountries(raw) {
         var countries = raw && (raw.production_countries || raw.productionCountries || raw.countries || raw.country);
         var list = [];

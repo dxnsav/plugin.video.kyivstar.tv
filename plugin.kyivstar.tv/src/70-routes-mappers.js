@@ -39,18 +39,21 @@
             }];
             var rows = [];
 
-            compilations.filter(function (item) {
-                return item.compilationElementType !== 'CONTENT_GROUP';
-            }).slice(0, 12).forEach(function (compilation) {
+            compilations.slice(0, 18).forEach(function (compilation) {
+                var type = nativeCompilationType(compilation);
+                var id = compilation.id;
+                var title = compilation.displayName || compilation.name || 'Selection';
+
                 categories.push({
                     kind: 'nav',
-                    title: compilation.displayName || compilation.name || 'Selection',
+                    title: title,
                     subtitle: 'Videos',
                     image: pickImage(compilation.images),
                     route: {
                         type: 'catalog',
-                        compilationId: compilation.id,
-                        compilationName: compilation.displayName || compilation.name || 'Selection',
+                        compilationId: type === 'compilation' ? id : null,
+                        groupId: type === 'group' ? id : null,
+                        compilationName: title,
                         offset: 0
                     }
                 });
@@ -100,8 +103,8 @@
     function loadCatalog(route, api) {
         var offset = route.offset || 0;
 
-        return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, LIMIT).then(function (elems) {
-            var items = [];
+        return loadCatalogPage(route, api, offset, LIMIT).then(function (elems) {
+            var items = offset ? [] : [filterMenuItem(route)];
 
             elems.forEach(function (asset) {
                 items.push(mapAsset(asset));
@@ -118,6 +121,25 @@
 
             return items;
         });
+    }
+
+    function loadCatalogPage(route, api, offset, limit) {
+        if (route.groupId) {
+            return api.getContentGroupElements(route.groupId, route.filters || [], route.sort || null, offset, limit);
+        }
+
+        return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, limit);
+    }
+
+    function filterMenuItem(route) {
+        return {
+            kind: 'filter',
+            title: 'Фільтр',
+            subtitle: activeFilterSummary(route),
+            image: '',
+            icon: iconSvg(),
+            route: route
+        };
     }
 
     function loadSearch(route, api) {

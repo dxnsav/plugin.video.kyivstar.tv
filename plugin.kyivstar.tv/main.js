@@ -849,17 +849,6 @@
 
     function showMainMenu() {
         addApiSource();
-
-        if (apiSourceAdded && Lampa.Activity && Lampa.Activity.push) {
-            Lampa.Activity.push({
-                title: TITLE,
-                component: 'main',
-                source: COMPONENT,
-                page: 1
-            });
-            return;
-        }
-
         pushRoute({ type: 'home' }, TITLE);
     }
 
@@ -1108,6 +1097,208 @@
         return value ? 'set' : 'empty';
     }
 
+    // 56-filter-menu.js
+    function showCatalogFilterMenu(route, api) {
+        if (!Lampa.Select || !Lampa.Select.show) {
+            notify('Lampa Select API is not available.');
+            return;
+        }
+
+        Promise.all([
+            api.getFilters(null).catch(function (error) {
+                debugLog('warn', 'filters:list:error', { error: error.message || String(error) });
+                return [];
+            }),
+            api.getSortElements().catch(function (error) {
+                debugLog('warn', 'filters:sort:error', { error: error.message || String(error) });
+                return [];
+            })
+        ]).then(function (data) {
+            var groups = normalizeFilterGroups(data[0]);
+            var sorts = normalizeSortElements(data[1]);
+            var items = [
+                { title: 'Розпочати пошук', action: 'apply' },
+                { title: 'Скинути фільтри', action: 'reset' },
+                { title: 'Сортування: ' + (route.sortName || 'Не вибрано'), action: 'sort', values: sorts }
+            ];
+
+            groups.forEach(function (group) {
+                items.push({
+                    title: group.title + ': ' + selectedFilterTitle(route, group),
+                    action: 'filter',
+                    group: group
+                });
+            });
+
+            Lampa.Select.show({
+                title: 'Фільтр',
+                items: items,
+                onSelect: function (item) {
+                    if (item.action === 'apply') {
+                        pushRoute(copyRoute(route, { offset: 0 }), routeTitle(route));
+                    } else if (item.action === 'reset') {
+                        pushRoute(copyRoute(route, { offset: 0, filters: [], filterMap: {}, sort: null, sortName: '' }), routeTitle(route));
+                    } else if (item.action === 'sort') {
+                        showSortSelect(route, sorts, api);
+                    } else if (item.action === 'filter') {
+                        showFilterValueSelect(route, item.group, api);
+                    }
+                },
+                onBack: function () {
+                    if (Lampa.Controller && Lampa.Controller.toggle) Lampa.Controller.toggle(COMPONENT);
+                }
+            });
+        });
+    }
+
+    function showSortSelect(route, sorts, api) {
+        var items = [{ title: (route.sort ? '' : '* ') + 'Не вибрано', id: null, name: '' }];
+
+        sorts.forEach(function (sort) {
+            items.push({
+                title: (sort.id === route.sort ? '* ' : '') + sort.title,
+                id: sort.id,
+                name: sort.title
+            });
+        });
+
+        Lampa.Select.show({
+            title: 'Сортування',
+            items: items,
+            onSelect: function (item) {
+                pushRoute(copyRoute(route, {
+                    offset: 0,
+                    sort: item.id || null,
+                    sortName: item.name || ''
+                }), routeTitle(route));
+            },
+            onBack: function () {
+                showCatalogFilterMenu(route, api);
+            }
+        });
+    }
+
+    function showFilterValueSelect(route, group, api) {
+        var selected = selectedFilterId(route, group);
+        var items = [{ title: (!selected ? '* ' : '') + 'Не вибрано', id: null, name: '' }];
+
+        group.items.forEach(function (value) {
+            items.push({
+                title: (value.id === selected ? '* ' : '') + value.title,
+                id: value.id,
+                name: value.title
+            });
+        });
+
+        Lampa.Select.show({
+            title: group.title,
+            items: items,
+            onSelect: function (item) {
+                var filterMap = merge({}, route.filterMap || {});
+                var filterNames = merge({}, route.filterNames || {});
+                var filters;
+
+                if (item.id) {
+                    filterMap[group.id] = item.id;
+                    filterNames[group.id] = item.name;
+                } else {
+                    delete filterMap[group.id];
+                    delete filterNames[group.id];
+                }
+
+                filters = objectValues(filterMap).filter(Boolean);
+
+                pushRoute(copyRoute(route, {
+                    offset: 0,
+                    filters: filters,
+                    filterMap: filterMap,
+                    filterNames: filterNames
+                }), routeTitle(route));
+            },
+            onBack: function () {
+                showCatalogFilterMenu(route, api);
+            }
+        });
+    }
+
+    function selectedFilterId(route, group) {
+        var map = route.filterMap || {};
+        return map[group.id] || '';
+    }
+
+    function selectedFilterTitle(route, group) {
+        var id = selectedFilterId(route, group);
+        var names = route.filterNames || {};
+        var found = null;
+        var i;
+
+        if (!id) return 'Не вибрано';
+        if (names[group.id]) return names[group.id];
+
+        for (i = 0; i < group.items.length; i++) {
+            if (group.items[i].id === id) {
+                found = group.items[i];
+                break;
+            }
+        }
+
+        return found ? found.title : 'Вибрано';
+    }
+
+    function activeFilterSummary(route) {
+        var names = route.filterNames ? objectValues(route.filterNames).filter(Boolean) : [];
+        var parts = [];
+
+        if (route.sortName) parts.push(route.sortName);
+        if (names.length) parts = parts.concat(names.slice(0, 2));
+        if (names.length > 2) parts.push('+' + (names.length - 2));
+
+        return parts.length ? parts.join(' / ') : 'Фільтри і сортування';
+    }
+
+    function normalizeFilterGroups(response) {
+        return asArray(response).map(function (group) {
+            var id = group.id || group.filterId || group.type || group.name || group.title;
+            var items = arrayFromAny(group.filterElements || group.elements || group.items || group.values || group.options);
+
+            return {
+                id: String(id || ''),
+                title: group.displayName || group.name || group.title || 'Фільтр',
+                items: normalizeFilterValues(items)
+            };
+        }).filter(function (group) {
+            return group.id && group.items.length;
+        });
+    }
+
+    function normalizeFilterValues(values) {
+        return asArray(values).map(function (value) {
+            var id = value.id || value.filterElementId || value.elementId || value.value;
+            var title = value.displayName || value.name || value.title || value.label || value.value;
+
+            return {
+                id: String(id || ''),
+                title: String(title || id || '')
+            };
+        }).filter(function (item) {
+            return item.id && item.title;
+        });
+    }
+
+    function normalizeSortElements(response) {
+        return asArray(response).map(function (sort) {
+            var id = sort.id || sort.filterSortElementId || sort.elementId || sort.value;
+            var title = sort.displayName || sort.name || sort.title || sort.label || sort.value;
+
+            return {
+                id: String(id || ''),
+                title: String(title || id || '')
+            };
+        }).filter(function (sort) {
+            return sort.id && sort.title;
+        });
+    }
+
     // 60-custom-component.js
     function KyivstarComponent(object) {
         var self = this;
@@ -1203,6 +1394,7 @@
             items.forEach(function (item) {
                 var card = renderCard(item);
                 if (route.type === 'root') card.addClass('kyivstar-tv-card--root');
+                if (item.kind === 'filter') card.addClass('kyivstar-tv-card--category');
                 grid.append(card);
                 activeItems.push(card);
             });
@@ -1247,7 +1439,7 @@
 
             if (item.image) {
                 thumb.append($('<img alt="">').attr('src', item.image));
-            } else if (item.kind === 'nav') {
+            } else if (item.kind === 'nav' || item.kind === 'filter') {
                 thumb.append($('<div class="kyivstar-tv-card__fallback kyivstar-tv-card__fallback--icon"></div>').html(item.icon || iconSvg()));
             } else {
                 thumb.append($('<div class="kyivstar-tv-card__fallback"></div>').text((item.title || 'K').slice(0, 2).toUpperCase()));
@@ -1312,6 +1504,8 @@
                 showDiagnosticsMenu(function () {
                     focusFirst();
                 });
+            } else if (item.kind === 'filter') {
+                showCatalogFilterMenu(route, api);
             } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
                 playItem(api, item);
             }
@@ -1406,18 +1600,21 @@
             }];
             var rows = [];
 
-            compilations.filter(function (item) {
-                return item.compilationElementType !== 'CONTENT_GROUP';
-            }).slice(0, 12).forEach(function (compilation) {
+            compilations.slice(0, 18).forEach(function (compilation) {
+                var type = nativeCompilationType(compilation);
+                var id = compilation.id;
+                var title = compilation.displayName || compilation.name || 'Selection';
+
                 categories.push({
                     kind: 'nav',
-                    title: compilation.displayName || compilation.name || 'Selection',
+                    title: title,
                     subtitle: 'Videos',
                     image: pickImage(compilation.images),
                     route: {
                         type: 'catalog',
-                        compilationId: compilation.id,
-                        compilationName: compilation.displayName || compilation.name || 'Selection',
+                        compilationId: type === 'compilation' ? id : null,
+                        groupId: type === 'group' ? id : null,
+                        compilationName: title,
                         offset: 0
                     }
                 });
@@ -1467,8 +1664,8 @@
     function loadCatalog(route, api) {
         var offset = route.offset || 0;
 
-        return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, LIMIT).then(function (elems) {
-            var items = [];
+        return loadCatalogPage(route, api, offset, LIMIT).then(function (elems) {
+            var items = offset ? [] : [filterMenuItem(route)];
 
             elems.forEach(function (asset) {
                 items.push(mapAsset(asset));
@@ -1485,6 +1682,25 @@
 
             return items;
         });
+    }
+
+    function loadCatalogPage(route, api, offset, limit) {
+        if (route.groupId) {
+            return api.getContentGroupElements(route.groupId, route.filters || [], route.sort || null, offset, limit);
+        }
+
+        return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, limit);
+    }
+
+    function filterMenuItem(route) {
+        return {
+            kind: 'filter',
+            title: 'Фільтр',
+            subtitle: activeFilterSummary(route),
+            image: '',
+            icon: iconSvg(),
+            route: route
+        };
     }
 
     function loadSearch(route, api) {
@@ -2501,6 +2717,27 @@
 
     function copyRoute(route, patch) {
         return merge(merge({}, route), patch);
+    }
+
+    function objectValues(object) {
+        var values = [];
+
+        object = object || {};
+        for (var key in object) {
+            if (Object.prototype.hasOwnProperty.call(object, key)) values.push(object[key]);
+        }
+
+        return values;
+    }
+
+    function arrayFromAny(value) {
+        if (!value) return [];
+        if (Object.prototype.toString.call(value) === '[object Array]') return value;
+        if (value.items) return asArray(value.items);
+        if (value.elements) return asArray(value.elements);
+        if (value.values) return asArray(value.values);
+        if (value.options) return asArray(value.options);
+        return asArray(value);
     }
 
     function normalizeProductionCountries(raw) {
