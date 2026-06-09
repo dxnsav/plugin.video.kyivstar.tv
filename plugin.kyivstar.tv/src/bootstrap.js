@@ -9,8 +9,6 @@
 
         try {
             ensureDeviceId();
-            addStyles();
-            addComponent();
             addApiSource();
             addFullPlayerHook();
             addSettings();

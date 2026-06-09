@@ -113,6 +113,10 @@
 
     function loadCatalogPage(route, api, offset, limit) {
         if (route.groupId) {
+            if (!(route.filters && route.filters.length) && !route.sort) {
+                return api.getContentGroupLegacyElements(route.groupId, offset, limit);
+            }
+
             return api.getContentGroupElements(route.groupId, route.filters || [], route.sort || null, offset, limit).catch(function (error) {
                 debugLog('warn', 'catalog:content-group-filtered:error', {
                     groupId: route.groupId,

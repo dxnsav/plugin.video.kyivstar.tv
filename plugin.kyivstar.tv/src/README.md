@@ -17,13 +17,10 @@ The build script concatenates files in the explicit order listed in `scripts/bui
 - `bootstrap.js` - startup flow and plugin initialization.
 - `settings-registration.js` - Lampa settings registration.
 - `lampa-integration.js` - menu, activity and global Lampa integration.
-- `native-source.js` - native source/search hooks.
+- `native-source.js` - native Lampa source rows, lists and full cards.
 - `search-source.js` - Kyivstar search UI/data flow.
 - `settings-menu.js` - Kyivstar TV settings screen and diagnostics actions.
-- `catalog-filter-menu.js` - Kyivstar filter and sort menu.
-- `catalog-component.js` - custom Lampa component and page rendering.
-- `routes-and-mappers.js` - route handlers and asset/card mappers.
+- `routes-and-mappers.js` - shared asset/card mappers and legacy route helpers.
 - `auth-and-playback.js` - login/session and playback entry points.
 - `api-client.js` - Kyivstar API client methods.
 - `utils.js` - generic helpers.
-- `styles.js` - injected CSS.

@@ -101,30 +101,32 @@
         }
 
         if (item.kind === 'nav' && item.route) {
-            pushRoute(item.route, item.title);
+            notify('Open this item from the native Kyivstar TV source list.');
         } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
             playItem(new KyivstarApi(), item);
         }
     }
 
-    function addComponent() {
-        if (!Lampa.Component || !Lampa.Component.add) {
-            setTimeout(addComponent, 500);
+    function showMainMenu(attempt) {
+        attempt = attempt || 0;
+        addApiSource();
+
+        if (apiSourceAdded && Lampa.Activity && Lampa.Activity.push) {
+            Lampa.Activity.push({
+                title: TITLE,
+                component: 'main',
+                source: COMPONENT,
+                page: 1
+            });
             return;
         }
 
-        Lampa.Component.add(COMPONENT, KyivstarComponent);
-    }
+        if (attempt < 10) {
+            setTimeout(function () {
+                showMainMenu(attempt + 1);
+            }, 250);
+            return;
+        }
 
-    function pushRoute(route, title) {
-        Lampa.Activity.push({
-            title: title || TITLE,
-            component: COMPONENT,
-            route: route
-        });
-    }
-
-    function showMainMenu() {
-        addApiSource();
-        pushRoute({ type: 'home' }, TITLE);
+        notify('Kyivstar TV native source is not ready yet.');
     }

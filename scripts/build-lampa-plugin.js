@@ -13,13 +13,10 @@ const sources = [
     'native-source.js',
     'search-source.js',
     'settings-menu.js',
-    'catalog-filter-menu.js',
-    'catalog-component.js',
     'routes-and-mappers.js',
     'auth-and-playback.js',
     'api-client.js',
-    'utils.js',
-    'styles.js'
+    'utils.js'
 ];
 
 const missing = sources.filter((file) => !fs.existsSync(path.join(srcDir, file)));

@@ -1,4 +1,4 @@
-    var PLUGIN_BUILD = '2026-06-09-native-lampa-source';
+    var PLUGIN_BUILD = '2026-06-09-native-only-source';
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
     var TITLE = 'Kyivstar TV';

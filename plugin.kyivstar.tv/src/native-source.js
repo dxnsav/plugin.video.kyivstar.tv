@@ -240,17 +240,7 @@
     }
 
     function loadNativeGroupPage(api, groupId, offset, limit) {
-        return api.getContentGroupElements(groupId, [], null, offset, limit).catch(function (error) {
-            debugLog('warn', 'api:group:filtered-error', {
-                groupId: groupId,
-                offset: offset || 0,
-                limit: limit || LIMIT,
-                error: error.message || String(error),
-                status: error.status || error.decode_code || ''
-            });
-
-            return api.getContentGroupLegacyElements(groupId, offset, limit);
-        }).then(function (assets) {
+        return api.getContentGroupLegacyElements(groupId, offset, limit).then(function (assets) {
             assets = asArray(assets);
             if (assets.length) return assets;
 
