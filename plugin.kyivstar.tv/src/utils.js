@@ -193,6 +193,44 @@
         return list;
     }
 
+    function normalizeGenres(raw) {
+        var genres = raw && (raw.genres || raw.genre || raw.categories || raw.category || raw.tags);
+        var list = [];
+        var used = {};
+
+        if (!genres) return list;
+
+        if (typeof genres === 'string') {
+            genres = genres.split(/[,/|]/);
+        } else {
+            genres = arrayFromAny(genres);
+        }
+
+        genres.forEach(function (genre) {
+            var name;
+            var id;
+
+            if (!genre) return;
+
+            if (typeof genre === 'string') {
+                name = genre.trim();
+            } else {
+                name = genre.name || genre.title || genre.displayName || genre.value || '';
+                id = genre.id || genre.genreId || genre.assetId || '';
+            }
+
+            if (!name || used[name]) return;
+            used[name] = true;
+
+            list.push({
+                id: id || name,
+                name: name
+            });
+        });
+
+        return list;
+    }
+
     function encodeForm(data) {
         var parts = [];
 

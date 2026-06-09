@@ -786,8 +786,10 @@
 
             addKyivstarFullButton(event.body, item);
             patchKyivstarFullLabels(event.body);
+            patchDanglingFullSeparators(event.body);
             setTimeout(function () {
                 patchKyivstarFullLabels(event.body);
+                patchDanglingFullSeparators(event.body);
             }, 250);
         });
 
@@ -838,6 +840,17 @@
             if (this.nodeValue && this.nodeValue.indexOf('KYIVSTAR_TV') !== -1) {
                 this.nodeValue = this.nodeValue.replace(/KYIVSTAR_TV/g, TITLE);
             }
+        });
+    }
+
+    function patchDanglingFullSeparators(body) {
+        var root = $(body);
+
+        root.find('*').contents().each(function () {
+            if (this.nodeType !== 3 || !this.nodeValue) return;
+            this.nodeValue = this.nodeValue
+                .replace(/\s+•\s*$/g, '')
+                .replace(/^\s*•\s+/g, '');
         });
     }
 
@@ -1189,7 +1202,7 @@
             overview: String(description || ''),
             runtime: runtime || 0,
             vote_average: rating || 0,
-            genres: [],
+            genres: normalizeGenres(raw),
             production_companies: [],
             production_countries: normalizeProductionCountries(raw),
             keywords: { results: [], keywords: [] },
@@ -2969,6 +2982,44 @@
                     name: name || code
                 });
             }
+        });
+
+        return list;
+    }
+
+    function normalizeGenres(raw) {
+        var genres = raw && (raw.genres || raw.genre || raw.categories || raw.category || raw.tags);
+        var list = [];
+        var used = {};
+
+        if (!genres) return list;
+
+        if (typeof genres === 'string') {
+            genres = genres.split(/[,/|]/);
+        } else {
+            genres = arrayFromAny(genres);
+        }
+
+        genres.forEach(function (genre) {
+            var name;
+            var id;
+
+            if (!genre) return;
+
+            if (typeof genre === 'string') {
+                name = genre.trim();
+            } else {
+                name = genre.name || genre.title || genre.displayName || genre.value || '';
+                id = genre.id || genre.genreId || genre.assetId || '';
+            }
+
+            if (!name || used[name]) return;
+            used[name] = true;
+
+            list.push({
+                id: id || name,
+                name: name
+            });
         });
 
         return list;

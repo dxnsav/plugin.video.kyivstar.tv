@@ -164,8 +164,10 @@
 
             addKyivstarFullButton(event.body, item);
             patchKyivstarFullLabels(event.body);
+            patchDanglingFullSeparators(event.body);
             setTimeout(function () {
                 patchKyivstarFullLabels(event.body);
+                patchDanglingFullSeparators(event.body);
             }, 250);
         });
 
@@ -216,6 +218,17 @@
             if (this.nodeValue && this.nodeValue.indexOf('KYIVSTAR_TV') !== -1) {
                 this.nodeValue = this.nodeValue.replace(/KYIVSTAR_TV/g, TITLE);
             }
+        });
+    }
+
+    function patchDanglingFullSeparators(body) {
+        var root = $(body);
+
+        root.find('*').contents().each(function () {
+            if (this.nodeType !== 3 || !this.nodeValue) return;
+            this.nodeValue = this.nodeValue
+                .replace(/\s+•\s*$/g, '')
+                .replace(/^\s*•\s+/g, '');
         });
     }
 
@@ -567,7 +580,7 @@
             overview: String(description || ''),
             runtime: runtime || 0,
             vote_average: rating || 0,
-            genres: [],
+            genres: normalizeGenres(raw),
             production_companies: [],
             production_countries: normalizeProductionCountries(raw),
             keywords: { results: [], keywords: [] },
