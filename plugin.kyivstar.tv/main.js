@@ -13,6 +13,7 @@
     var LIMIT = 20;
     var HOME_LIMIT = 14;
     var NATIVE_MAIN_ROWS = 6;
+    var UNKNOWN_TOTAL_PAGES = 10000;
     var CACHE_CHANNELS_MS = 15 * 60 * 1000;
     var CACHE_CATALOG_MS = 60 * 60 * 1000;
     var MAX_LOGS = 120;
@@ -413,19 +414,31 @@
 
         loadNativeListPage(api, parsed, offset, LIMIT).then(function (assets) {
             var cards = asArray(assets).map(mapAsset).map(mapNativeCard).filter(Boolean);
+            var hasNext = cards.length === LIMIT;
 
             if (!cards.length && page === 1) {
                 if (typeof onError === 'function') onError();
                 return;
             }
 
+            debugLog('info', 'api:list:ok', {
+                url: parsed.url,
+                page: page,
+                offset: offset,
+                limit: LIMIT,
+                count: cards.length,
+                hasNext: hasNext,
+                compilationId: parsed.compilationId || '',
+                groupId: parsed.groupId || ''
+            });
+
             onComplete({
                 title: parsed.title,
                 url: parsed.url,
                 source: COMPONENT,
                 page: page,
-                total_pages: cards.length === LIMIT ? page + 1 : page,
-                total_results: cards.length === LIMIT ? (page + 1) * LIMIT : offset + cards.length,
+                total_pages: hasNext ? UNKNOWN_TOTAL_PAGES : page,
+                total_results: hasNext ? UNKNOWN_TOTAL_PAGES * LIMIT : offset + cards.length,
                 results: cards
             });
         }).catch(function (error) {
@@ -529,7 +542,7 @@
     function loadNativeRow(api, compilation) {
         var title = compilation ? (compilation.displayName || compilation.name || 'Videos') : 'Videos';
         var id = compilation ? compilation.id : null;
-        var type = compilation && compilation.compilationElementType === 'CONTENT_GROUP' ? 'group' : 'compilation';
+        var type = nativeCompilationType(compilation);
         var url = nativeListUrl(id, type);
         var parsed = {
             url: url,
@@ -540,14 +553,15 @@
 
         return loadNativeListPage(api, parsed, 0, LIMIT).then(function (assets) {
             var cards = asArray(assets).map(mapAsset).map(mapNativeCard).filter(Boolean);
+            var hasNext = cards.length === LIMIT;
 
             return {
                 title: title,
                 url: url,
                 source: COMPONENT,
                 page: 1,
-                total_pages: cards.length === LIMIT ? 2 : 1,
-                total_results: cards.length === LIMIT ? LIMIT * 2 : cards.length,
+                total_pages: hasNext ? UNKNOWN_TOTAL_PAGES : 1,
+                total_results: hasNext ? UNKNOWN_TOTAL_PAGES * LIMIT : cards.length,
                 results: cards
             };
         }).catch(function (error) {
@@ -559,6 +573,13 @@
             });
             return null;
         });
+    }
+
+    function nativeCompilationType(compilation) {
+        if (!compilation) return 'root';
+        if (compilation.compilationElementType === 'CONTENT_GROUP') return 'group';
+        if (compilation.compilationElementType === 'PREDEFINED') return 'root';
+        return 'compilation';
     }
 
     function loadNativeListPage(api, parsed, offset, limit) {
@@ -588,7 +609,7 @@
 
         if (!child) return Promise.resolve([]);
 
-        type = child.compilationElementType === 'CONTENT_GROUP' ? 'group' : 'compilation';
+        type = nativeCompilationType(child);
         parsed = {
             compilationId: type === 'compilation' ? child.id : null,
             groupId: type === 'group' ? child.id : null
@@ -602,7 +623,7 @@
     }
 
     function nativeListUrl(compilationId, type) {
-        if (!compilationId) return 'kyivstar/videos';
+        if (!compilationId || type === 'root') return 'kyivstar/videos';
         return 'kyivstar/' + (type === 'group' ? 'group' : 'compilation') + '/' + encodeURIComponent(compilationId);
     }
 
@@ -723,16 +744,9 @@
                 });
             },
             onSelect: function (params, close) {
-                var card = params && params.element ? params.element : null;
-                var item = card ? card._kyivstar : null;
+                var item = params && params.element ? params.element._kyivstar : null;
                 if (typeof close === 'function') close();
-
-                if (item && item.kind === 'channel') {
-                    openKyivstarItem(item);
-                    return;
-                }
-
-                openNativeFull(card);
+                openKyivstarItem(item);
             },
             onCancel: function () {
                 api.clear();
@@ -802,28 +816,6 @@
             pushRoute(item.route, item.title);
         } else if (item.kind === 'vod' || item.kind === 'episode' || item.kind === 'channel') {
             playItem(new KyivstarApi(), item);
-        }
-    }
-
-    function openNativeFull(card) {
-        if (!card) return;
-
-        debugLog('info', 'search:native:open-full', {
-            assetId: card.id,
-            title: card.title || card.name || '',
-            source: card.source
-        });
-
-        if (Lampa.Router && Lampa.Router.call) {
-            Lampa.Router.call('full', card);
-            return;
-        }
-
-        if (Lampa.Activity && Lampa.Activity.push) {
-            Lampa.Activity.push(merge({
-                title: card.title || card.name || TITLE,
-                component: 'full'
-            }, card));
         }
     }
 
