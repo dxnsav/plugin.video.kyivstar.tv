@@ -23,6 +23,10 @@
                     source.count = count;
                     source.results_count = count;
                     source.total_results = count;
+                    source.results = count;
+                    source.result = count;
+                    source.total = count;
+                    source.title = count ? TITLE + ' ' + count : TITLE;
 
                     debugLog('info', 'search:native:ok', {
                         query: query,
@@ -32,11 +36,18 @@
                     rows.count = count;
                     rows.results_count = count;
                     rows.total_results = count;
+                    rows.results = count;
+                    rows.result = count;
+                    rows.total = count;
                     done(rows);
                 }).catch(function (error) {
                     source.count = 0;
                     source.results_count = 0;
                     source.total_results = 0;
+                    source.results = 0;
+                    source.result = 0;
+                    source.total = 0;
+                    source.title = TITLE;
                     debugLog('error', 'search:native:error', {
                         query: query,
                         error: error.message || String(error),
@@ -143,19 +154,21 @@
             method: card.method || ''
         });
 
-        if (Lampa.Router && Lampa.Router.call) {
-            Lampa.Router.call('full', card);
-            return;
-        }
-
         if (Lampa.Activity && Lampa.Activity.push) {
             Lampa.Activity.push({
                 component: 'full',
                 source: COMPONENT,
                 method: card.method,
+                id: card.id,
                 card: card,
-                movie: card
+                movie: card,
+                _kyivstar: item
             });
+            return;
+        }
+
+        if (Lampa.Router && Lampa.Router.call) {
+            Lampa.Router.call('full', card);
             return;
         }
 

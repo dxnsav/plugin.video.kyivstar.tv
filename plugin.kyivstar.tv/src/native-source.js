@@ -222,7 +222,127 @@
             type: item.videoType || ''
         });
 
+        if (isKyivstarSeries(item)) {
+            openSeriesEpisodeSelect(new KyivstarApi(), item);
+            return;
+        }
+
         playItem(new KyivstarApi(), item);
+    }
+
+    function isKyivstarSeries(item) {
+        var raw = item && item.raw ? item.raw : {};
+        var type = raw.assetType || raw.contentType || raw.type || '';
+        var typeValue = type && type.value ? type.value : type;
+
+        return !!(item && (item.kind === 'nav' || typeValue === 'SERIES'));
+    }
+
+    function openSeriesEpisodeSelect(api, item) {
+        notify('Loading episodes...');
+        debugLog('info', 'full:series:start', {
+            assetId: item.assetId || '',
+            title: item.title || ''
+        });
+
+        api.getAssetInfo(item.assetId).then(function (info) {
+            var asset = asArray(info)[0] || item.raw || {};
+            var seasons = asArray(asset.seasons);
+
+            if (!seasons.length) {
+                return showEpisodeSelect(api, item, 1);
+            }
+
+            if (seasons.length === 1) {
+                return showEpisodeSelect(api, item, seasonNumber(seasons[0]));
+            }
+
+            showSeasonSelect(api, item, seasons);
+        }).catch(function (error) {
+            debugLog('warn', 'full:series:details-error', {
+                assetId: item.assetId || '',
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+            showEpisodeSelect(api, item, 1);
+        });
+    }
+
+    function showSeasonSelect(api, item, seasons) {
+        if (!Lampa.Select || !Lampa.Select.show) {
+            showEpisodeSelect(api, item, seasonNumber(seasons[0]));
+            return;
+        }
+
+        Lampa.Select.show({
+            title: item.title || 'Series',
+            items: seasons.map(function (season) {
+                var number = seasonNumber(season);
+                return {
+                    title: 'Season ' + number,
+                    season: number
+                };
+            }),
+            onSelect: function (season) {
+                showEpisodeSelect(api, item, season.season);
+            }
+        });
+    }
+
+    function showEpisodeSelect(api, item, season) {
+        api.getTvGroup(item.assetId, season || 1, 0, 100).then(function (episodes) {
+            var mapped = asArray(episodes).map(function (episode) {
+                var mappedEpisode = mapAsset(episode);
+                mappedEpisode.kind = 'episode';
+                return mappedEpisode;
+            }).filter(function (episode) {
+                return episode && episode.assetId;
+            });
+
+            debugLog('info', 'full:series:episodes-ok', {
+                assetId: item.assetId || '',
+                season: season || 1,
+                count: mapped.length
+            });
+
+            if (!mapped.length) {
+                notify('No playable episodes found.');
+                return;
+            }
+
+            if (!Lampa.Select || !Lampa.Select.show) {
+                playItem(api, mapped[0]);
+                return;
+            }
+
+            Lampa.Select.show({
+                title: item.title || 'Episodes',
+                items: mapped.map(function (episode, index) {
+                    return {
+                        title: episode.title || ('Episode ' + (index + 1)),
+                        subtitle: episode.subtitle || '',
+                        episode: episode
+                    };
+                }),
+                onSelect: function (selected) {
+                    playItem(api, selected.episode);
+                }
+            });
+        }).catch(function (error) {
+            notify(error.message || String(error));
+            debugLog('error', 'full:series:episodes-error', {
+                assetId: item.assetId || '',
+                season: season || 1,
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+        });
+    }
+
+    function seasonNumber(season) {
+        var number = season && (season.number || season.seasonNumber || season.value || season.id);
+        number = parseInt(number, 10);
+        return number > 0 ? number : 1;
     }
 
     function findFullButtonRow(root) {
