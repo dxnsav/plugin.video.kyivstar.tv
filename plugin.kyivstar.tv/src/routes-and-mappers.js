@@ -195,17 +195,34 @@
             var asset = info && info.length ? info[0] : null;
             var seasons = asset && asset.seasons ? asset.seasons : [];
 
-            return seasons.map(function (season) {
-                return {
+            if (!seasons.length) {
+                return [{
                     kind: 'nav',
-                    title: 'Season ' + season.number,
+                    title: t('season_prefix') + '1',
                     subtitle: route.title || '',
                     image: asset ? (pickImage(asset.images) || asset.image) : '',
                     route: {
                         type: 'series-episodes',
                         assetId: route.assetId,
-                        season: season.number,
-                        title: (route.title || 'Series') + ': Season ' + season.number,
+                        season: 1,
+                        title: (route.title || t('episodes')) + ': ' + t('season_prefix') + '1',
+                        offset: 0
+                    }
+                }];
+            }
+
+            return seasons.map(function (season) {
+                var number = seasonNumber(season);
+                return {
+                    kind: 'nav',
+                    title: t('season_prefix') + number,
+                    subtitle: route.title || '',
+                    image: asset ? (pickImage(asset.images) || asset.image) : '',
+                    route: {
+                        type: 'series-episodes',
+                        assetId: route.assetId,
+                        season: number,
+                        title: (route.title || t('episodes')) + ': ' + t('season_prefix') + number,
                         offset: 0
                     }
                 };
@@ -223,11 +240,11 @@
                 return mapped;
             });
 
-            if (episodes.length === LIMIT) {
+            if (episodes.length === LIMIT && !route.native) {
                 items.push({
                     kind: 'nav',
-                    title: 'Next',
-                    subtitle: 'Load more episodes',
+                    title: t('next_page'),
+                    subtitle: t('episodes'),
                     route: copyRoute(route, { offset: offset + episodes.length })
                 });
             }

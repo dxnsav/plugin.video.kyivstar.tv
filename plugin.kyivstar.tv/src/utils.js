@@ -293,6 +293,32 @@
         }).filter(Boolean);
     }
 
+    function normalizeSeasons(seasons) {
+        return arrayFromAny(seasons).map(function (season, index) {
+            var number = seasonNumber(season);
+            var episodes = Number(season && (season.numberOfEpisodes || season.episodeCount || season.episodesCount || season.episodes)) || 0;
+
+            return {
+                id: season && (season.id || season.assetId) || number || index + 1,
+                name: season && (season.name || season.title) || (t('season_prefix') + number),
+                season_number: number,
+                episode_count: episodes,
+                air_date: season && (season.releaseDate || season.release_date || season.air_date) || '',
+                poster_path: season && (season.poster_path || season.image || pickImage(season.images)) || ''
+            };
+        });
+    }
+
+    function countSeasonEpisodes(seasons) {
+        var total = 0;
+
+        asArray(seasons).forEach(function (season) {
+            total += Number(season && season.episode_count) || 0;
+        });
+
+        return total;
+    }
+
     function normalizeRating(raw) {
         var ratings = arrayFromAny(raw && raw.ratings);
         var rating = ratings[0] || {};

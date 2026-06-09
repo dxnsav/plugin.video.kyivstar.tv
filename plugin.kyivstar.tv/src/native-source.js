@@ -59,7 +59,7 @@
         var offset = (page - 1) * LIMIT;
 
         loadNativeListPage(api, parsed, offset, LIMIT).then(function (assets) {
-            var cards = asArray(assets).map(mapAsset).map(mapNativeCard).filter(Boolean);
+            var cards = asArray(assets).map(mapNativeListItem).map(mapNativeCard).filter(Boolean);
             var hasNext = cards.length === LIMIT;
 
             if (!cards.length && page === 1) {
@@ -122,6 +122,18 @@
         }, 2500);
 
         if (!item.assetId || item.kind === 'channel') {
+            complete(item);
+            return;
+        }
+
+        if (item.kind === 'episode') {
+            playItem(api, item);
+            complete(item);
+            return;
+        }
+
+        if (item.kind === 'nav' && item.route && !item.assetId) {
+            openNativeRouteCategory(item.route);
             complete(item);
             return;
         }
@@ -252,7 +264,11 @@
         });
 
         if (isKyivstarSeries(item)) {
-            openSeriesEpisodeSelect(new KyivstarApi(), item);
+            openNativeRouteCategory({
+                type: 'series-seasons',
+                assetId: item.assetId,
+                title: item.title || TITLE
+            });
             return;
         }
 
@@ -430,7 +446,7 @@
         };
 
         return loadNativeListPage(api, parsed, 0, LIMIT).then(function (assets) {
-            var cards = asArray(assets).map(mapAsset).map(mapNativeCard).filter(Boolean);
+            var cards = asArray(assets).map(mapNativeListItem).map(mapNativeCard).filter(Boolean);
             var hasNext = cards.length === LIMIT;
 
             return {
@@ -462,6 +478,11 @@
     }
 
     function loadNativeListPage(api, parsed, offset, limit) {
+        if (parsed.route) {
+            parsed.route.offset = offset;
+            parsed.route.native = true;
+            return loadRoute(parsed.route, api);
+        }
         if (parsed.groupId) return loadNativeGroupPage(api, parsed.groupId, offset, limit);
 
         return api.getContentAreaElements(parsed.compilationId, [], parsed.sortId || null, offset, limit);
@@ -506,6 +527,39 @@
         return 'kyivstar/' + (type === 'group' ? 'group' : 'compilation') + '/' + encodeURIComponent(compilationId);
     }
 
+    function nativeRouteUrl(route) {
+        return 'kyivstar/route/' + encodeURIComponent(safeJson(merge({ native: true }, route || {})));
+    }
+
+    function openNativeRouteCategory(route) {
+        var title = routeTitle(route);
+        var url = nativeRouteUrl(route);
+
+        debugLog('info', 'route:open-category', {
+            title: title,
+            url: url,
+            type: route && route.type ? route.type : ''
+        });
+
+        if (Lampa.Activity && Lampa.Activity.push) {
+            Lampa.Activity.push({
+                component: 'category',
+                source: COMPONENT,
+                title: title,
+                url: url,
+                page: 1
+            });
+            return true;
+        }
+
+        notify(t('source_not_ready'));
+        return false;
+    }
+
+    function mapNativeListItem(item) {
+        return item && item.kind ? item : mapAsset(item || {});
+    }
+
     function textValue(value) {
         return typeof value === 'string' && value ? value : '';
     }
@@ -515,8 +569,10 @@
         var title = params && params.title ? params.title : 'Videos';
         var compilationPrefix = 'kyivstar/compilation/';
         var groupPrefix = 'kyivstar/group/';
+        var routePrefix = 'kyivstar/route/';
         var compilationId = null;
         var groupId = null;
+        var route = null;
 
         if (url.indexOf(compilationPrefix) === 0) {
             try {
@@ -530,13 +586,23 @@
             } catch (groupError) {
                 groupId = url.substr(groupPrefix.length);
             }
+        } else if (url.indexOf(routePrefix) === 0) {
+            try {
+                route = JSON.parse(decodeURIComponent(url.substr(routePrefix.length)));
+            } catch (routeError) {
+                debugLog('warn', 'route:decode-error', {
+                    url: url,
+                    error: routeError.message || String(routeError)
+                });
+            }
         }
 
         return {
             url: url,
             title: title,
             compilationId: compilationId,
-            groupId: groupId
+            groupId: groupId,
+            route: route
         };
     }
 
@@ -572,6 +638,7 @@
         var cast = normalizeCrewList(raw.actors || raw.cast, 'cast');
         var directors = normalizeCrewList(raw.directors || raw.director, 'director');
         var keywords = normalizeKeywords(raw);
+        var seasons = normalizeSeasons(raw.seasons);
         var likes = Number(raw.likeCount || raw.likes || 0) || 0;
         var dislikes = Number(raw.dislikeCount || raw.dislikes || 0) || 0;
         var reactions = {
@@ -612,8 +679,9 @@
             budget: 0,
             status: raw.deactivated ? '' : 'Released',
             kp_rating: 0,
-            number_of_episodes: 0,
-            number_of_seasons: 0,
+            number_of_episodes: countSeasonEpisodes(seasons),
+            number_of_seasons: seasons.length,
+            seasons: seasons,
             kyivstar_reactions: reactions,
             kyivstar_genres: genres,
             kyivstar_rating: ratingInfo,

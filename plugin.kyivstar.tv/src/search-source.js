@@ -123,6 +123,8 @@
             method: isSeries ? 'tv' : 'movie',
             videoType: item.videoType || 'VIRTUAL',
             raw: raw,
+            route: item.route || null,
+            url: item.route ? nativeRouteUrl(item.route) : '',
             _kyivstar: item
         };
 

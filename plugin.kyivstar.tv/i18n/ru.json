@@ -53,6 +53,7 @@
   "no_playable_episodes": "Не найдены доступные эпизоды.",
   "episodes": "Эпизоды",
   "episode_prefix": "Эпизод ",
+  "next_page": "Следующая",
   "full_card_api_unavailable": "Lampa full card API недоступен.",
   "source_not_ready": "Нативный источник Kyivstar TV еще недоступен.",
   "account_password_required": "Укажите лицевой счет и пароль в настройках Kyivstar TV.",

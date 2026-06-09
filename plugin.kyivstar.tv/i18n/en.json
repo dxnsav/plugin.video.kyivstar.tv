@@ -53,6 +53,7 @@
   "no_playable_episodes": "No playable episodes found.",
   "episodes": "Episodes",
   "episode_prefix": "Episode ",
+  "next_page": "Next",
   "full_card_api_unavailable": "Lampa full card API is not available.",
   "source_not_ready": "Kyivstar TV native source is not ready yet.",
   "account_password_required": "Set personal account and password in Kyivstar TV settings.",
