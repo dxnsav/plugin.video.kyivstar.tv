@@ -4,14 +4,14 @@
         var compilationsCache = [];
 
         function loadRows(offset, limit, resolve, reject) {
-            api.getCompilations(null).catch(function (error) {
-                debugLog('warn', 'api:main:compilations-error', {
+            api.getContentAreas().catch(function (error) {
+                debugLog('warn', 'api:main:contentareas-error', {
                     error: error.message || String(error),
                     status: error.status || error.decode_code || ''
                 });
                 return [];
-            }).then(function (compilations) {
-                compilationsCache = filterNativeCompilations(compilations);
+            }).then(function (areas) {
+                compilationsCache = filterNativeCompilations(areas);
 
                 var slice = compilationsCache.slice(offset, offset + limit);
                 var loaders = slice.map(function (compilation) {
@@ -181,13 +181,17 @@
 
     function filterNativeCompilations(compilations) {
         return asArray(compilations).filter(function (item) {
-            return item && item.id;
+            return item && item.active !== false && (item.id || item.assetId);
+        }).sort(function (left, right) {
+            var a = typeof left.contentAreaLocation === 'number' ? left.contentAreaLocation : 9999;
+            var b = typeof right.contentAreaLocation === 'number' ? right.contentAreaLocation : 9999;
+            return a - b;
         });
     }
 
     function loadNativeRow(api, compilation) {
-        var title = compilation ? (compilation.displayName || compilation.name || 'Videos') : 'Videos';
-        var id = compilation ? compilation.id : null;
+        var title = compilation ? (textValue(compilation.name) || textValue(compilation.title) || textValue(compilation.displayName) || 'Videos') : 'Videos';
+        var id = compilation ? (compilation.assetId || compilation.id) : null;
         var type = nativeCompilationType(compilation);
         var url = nativeListUrl(id, type);
         var parsed = {
@@ -223,6 +227,7 @@
 
     function nativeCompilationType(compilation) {
         if (!compilation) return 'root';
+        if (compilation.entityType === 'CONTENT_GROUP') return 'group';
         if (compilation.compilationElementType === 'CONTENT_GROUP') return 'group';
         if (compilation.compilationElementType === 'PREDEFINED') return 'root';
         return 'compilation';
@@ -235,7 +240,17 @@
     }
 
     function loadNativeGroupPage(api, groupId, offset, limit) {
-        return api.getContentGroupElements(groupId, [], null, offset, limit).then(function (assets) {
+        return api.getContentGroupElements(groupId, [], null, offset, limit).catch(function (error) {
+            debugLog('warn', 'api:group:filtered-error', {
+                groupId: groupId,
+                offset: offset || 0,
+                limit: limit || LIMIT,
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+
+            return api.getContentGroupLegacyElements(groupId, offset, limit);
+        }).then(function (assets) {
             assets = asArray(assets);
             if (assets.length) return assets;
 
@@ -271,6 +286,10 @@
     function nativeListUrl(compilationId, type) {
         if (!compilationId || type === 'root') return 'kyivstar/videos';
         return 'kyivstar/' + (type === 'group' ? 'group' : 'compilation') + '/' + encodeURIComponent(compilationId);
+    }
+
+    function textValue(value) {
+        return typeof value === 'string' && value ? value : '';
     }
 
     function parseNativeList(params) {

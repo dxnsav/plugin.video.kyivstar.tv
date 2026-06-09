@@ -266,6 +266,15 @@
         });
     };
 
+    KyivstarApi.prototype.getContentAreas = function () {
+        var self = this;
+        return this.cached('contentareas-my-tv-web-v1', CACHE_CATALOG_MS, function () {
+            return self.withSession(function (session) {
+                return self.request('api/v2/contentareas/MY_TV_WEB;jsessionid=' + encodeURIComponent(session.sessionId) + '?includeRestricted=true');
+            });
+        });
+    };
+
     KyivstarApi.prototype.getCompilations = function (areaId) {
         var self = this;
         return this.cached('compilations-v2-' + (areaId || 'root'), CACHE_CATALOG_MS, function () {
@@ -352,6 +361,20 @@
                         sortOrder: null
                     }
                 });
+            });
+        });
+    };
+
+    KyivstarApi.prototype.getContentGroupLegacyElements = function (groupId, offset, limit) {
+        var self = this;
+        var key = ['content-group-legacy-v1', groupId || 'none', offset || 0, limit || LIMIT].join('-');
+
+        return this.cached(key, CACHE_CHANNELS_MS, function () {
+            return self.withSession(function (session) {
+                return self.request('gallery/contentgroups/' + encodeURIComponent(groupId) +
+                    ';jsessionid=' + encodeURIComponent(session.sessionId) +
+                    '?offset=' + encodeURIComponent(offset || 0) +
+                    '&limit=' + encodeURIComponent(limit || LIMIT));
             });
         });
     };

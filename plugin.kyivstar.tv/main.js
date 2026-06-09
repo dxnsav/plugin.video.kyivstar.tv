@@ -366,14 +366,14 @@
         var compilationsCache = [];
 
         function loadRows(offset, limit, resolve, reject) {
-            api.getCompilations(null).catch(function (error) {
-                debugLog('warn', 'api:main:compilations-error', {
+            api.getContentAreas().catch(function (error) {
+                debugLog('warn', 'api:main:contentareas-error', {
                     error: error.message || String(error),
                     status: error.status || error.decode_code || ''
                 });
                 return [];
-            }).then(function (compilations) {
-                compilationsCache = filterNativeCompilations(compilations);
+            }).then(function (areas) {
+                compilationsCache = filterNativeCompilations(areas);
 
                 var slice = compilationsCache.slice(offset, offset + limit);
                 var loaders = slice.map(function (compilation) {
@@ -543,13 +543,17 @@
 
     function filterNativeCompilations(compilations) {
         return asArray(compilations).filter(function (item) {
-            return item && item.id;
+            return item && item.active !== false && (item.id || item.assetId);
+        }).sort(function (left, right) {
+            var a = typeof left.contentAreaLocation === 'number' ? left.contentAreaLocation : 9999;
+            var b = typeof right.contentAreaLocation === 'number' ? right.contentAreaLocation : 9999;
+            return a - b;
         });
     }
 
     function loadNativeRow(api, compilation) {
-        var title = compilation ? (compilation.displayName || compilation.name || 'Videos') : 'Videos';
-        var id = compilation ? compilation.id : null;
+        var title = compilation ? (textValue(compilation.name) || textValue(compilation.title) || textValue(compilation.displayName) || 'Videos') : 'Videos';
+        var id = compilation ? (compilation.assetId || compilation.id) : null;
         var type = nativeCompilationType(compilation);
         var url = nativeListUrl(id, type);
         var parsed = {
@@ -585,6 +589,7 @@
 
     function nativeCompilationType(compilation) {
         if (!compilation) return 'root';
+        if (compilation.entityType === 'CONTENT_GROUP') return 'group';
         if (compilation.compilationElementType === 'CONTENT_GROUP') return 'group';
         if (compilation.compilationElementType === 'PREDEFINED') return 'root';
         return 'compilation';
@@ -597,7 +602,17 @@
     }
 
     function loadNativeGroupPage(api, groupId, offset, limit) {
-        return api.getContentGroupElements(groupId, [], null, offset, limit).then(function (assets) {
+        return api.getContentGroupElements(groupId, [], null, offset, limit).catch(function (error) {
+            debugLog('warn', 'api:group:filtered-error', {
+                groupId: groupId,
+                offset: offset || 0,
+                limit: limit || LIMIT,
+                error: error.message || String(error),
+                status: error.status || error.decode_code || ''
+            });
+
+            return api.getContentGroupLegacyElements(groupId, offset, limit);
+        }).then(function (assets) {
             assets = asArray(assets);
             if (assets.length) return assets;
 
@@ -633,6 +648,10 @@
     function nativeListUrl(compilationId, type) {
         if (!compilationId || type === 'root') return 'kyivstar/videos';
         return 'kyivstar/' + (type === 'group' ? 'group' : 'compilation') + '/' + encodeURIComponent(compilationId);
+    }
+
+    function textValue(value) {
+        return typeof value === 'string' && value ? value : '';
     }
 
     function parseNativeList(params) {
@@ -1594,8 +1613,8 @@
 
     function loadHome(api) {
         return Promise.all([
-            api.getCompilations(null).catch(function (error) {
-                debugLog('warn', 'home:compilations:error', { error: error.message || String(error) });
+            api.getContentAreas().catch(function (error) {
+                debugLog('warn', 'home:contentareas:error', { error: error.message || String(error) });
                 return [];
             }),
             api.getContentAreaElements(null, [], null, 0, LIMIT).catch(function (error) {
@@ -1603,7 +1622,7 @@
                 return [];
             })
         ]).then(function (data) {
-            var compilations = data[0] || [];
+            var areas = sortHomeAreas(asArray(data[0]));
             var videos = data[1] || [];
             var categories = [{
                 kind: 'nav',
@@ -1614,24 +1633,10 @@
             }];
             var rows = [];
 
-            compilations.slice(0, 18).forEach(function (compilation) {
-                var type = nativeCompilationType(compilation);
-                var id = compilation.id;
-                var title = compilation.displayName || compilation.name || 'Selection';
+            areas.forEach(function (area) {
+                var item = mapHomeArea(area);
 
-                categories.push({
-                    kind: 'nav',
-                    title: title,
-                    subtitle: 'Videos',
-                    image: pickImage(compilation.images),
-                    route: {
-                        type: 'catalog',
-                        compilationId: type === 'compilation' ? id : null,
-                        groupId: type === 'group' ? id : null,
-                        compilationName: title,
-                        offset: 0
-                    }
-                });
+                if (item) categories.push(item);
             });
 
             if (categories.length) rows.push({ title: 'Categories', items: categories });
@@ -1679,6 +1684,8 @@
         var offset = route.offset || 0;
 
         return loadCatalogPage(route, api, offset, LIMIT).then(function (elems) {
+            elems = asArray(elems);
+
             var items = offset ? [] : [filterMenuItem(route)];
 
             elems.forEach(function (asset) {
@@ -1700,10 +1707,53 @@
 
     function loadCatalogPage(route, api, offset, limit) {
         if (route.groupId) {
-            return api.getContentGroupElements(route.groupId, route.filters || [], route.sort || null, offset, limit);
+            return api.getContentGroupElements(route.groupId, route.filters || [], route.sort || null, offset, limit).catch(function (error) {
+                debugLog('warn', 'catalog:content-group-filtered:error', {
+                    groupId: route.groupId,
+                    offset: offset || 0,
+                    limit: limit || LIMIT,
+                    error: error.message || String(error),
+                    status: error.status || error.decode_code || ''
+                });
+
+                return api.getContentGroupLegacyElements(route.groupId, offset, limit);
+            });
         }
 
         return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, limit);
+    }
+
+    function sortHomeAreas(areas) {
+        return asArray(areas).filter(function (area) {
+            return area && area.active !== false && area.assetId;
+        }).sort(function (left, right) {
+            var a = typeof left.contentAreaLocation === 'number' ? left.contentAreaLocation : 9999;
+            var b = typeof right.contentAreaLocation === 'number' ? right.contentAreaLocation : 9999;
+            return a - b;
+        });
+    }
+
+    function mapHomeArea(area) {
+        var title = textValue(area.name) || textValue(area.title) || textValue(area.displayName) || 'Selection';
+        var subtitle = textValue(area.type) || textValue(area.entityType) || 'Videos';
+
+        return {
+            kind: 'nav',
+            title: title,
+            subtitle: subtitle,
+            image: pickImage(area.images),
+            route: {
+                type: 'catalog',
+                compilationId: null,
+                groupId: area.assetId,
+                compilationName: title,
+                offset: 0
+            }
+        };
+    }
+
+    function textValue(value) {
+        return typeof value === 'string' && value ? value : '';
     }
 
     function filterMenuItem(route) {
@@ -1915,6 +1965,8 @@
         if (value.items && Object.prototype.toString.call(value.items) === '[object Array]') return value.items;
         if (value.elements && Object.prototype.toString.call(value.elements) === '[object Array]') return value.elements;
         if (value.results && Object.prototype.toString.call(value.results) === '[object Array]') return value.results;
+        if (value.content && Object.prototype.toString.call(value.content) === '[object Array]') return value.content;
+        if (value.assets && Object.prototype.toString.call(value.assets) === '[object Array]') return value.assets;
         if (typeof value.length === 'number') return Array.prototype.slice.call(value);
         return [];
     }
@@ -2291,6 +2343,15 @@
         });
     };
 
+    KyivstarApi.prototype.getContentAreas = function () {
+        var self = this;
+        return this.cached('contentareas-my-tv-web-v1', CACHE_CATALOG_MS, function () {
+            return self.withSession(function (session) {
+                return self.request('api/v2/contentareas/MY_TV_WEB;jsessionid=' + encodeURIComponent(session.sessionId) + '?includeRestricted=true');
+            });
+        });
+    };
+
     KyivstarApi.prototype.getCompilations = function (areaId) {
         var self = this;
         return this.cached('compilations-v2-' + (areaId || 'root'), CACHE_CATALOG_MS, function () {
@@ -2377,6 +2438,20 @@
                         sortOrder: null
                     }
                 });
+            });
+        });
+    };
+
+    KyivstarApi.prototype.getContentGroupLegacyElements = function (groupId, offset, limit) {
+        var self = this;
+        var key = ['content-group-legacy-v1', groupId || 'none', offset || 0, limit || LIMIT].join('-');
+
+        return this.cached(key, CACHE_CHANNELS_MS, function () {
+            return self.withSession(function (session) {
+                return self.request('gallery/contentgroups/' + encodeURIComponent(groupId) +
+                    ';jsessionid=' + encodeURIComponent(session.sessionId) +
+                    '?offset=' + encodeURIComponent(offset || 0) +
+                    '&limit=' + encodeURIComponent(limit || LIMIT));
             });
         });
     };

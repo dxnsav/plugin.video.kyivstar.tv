@@ -19,8 +19,8 @@
 
     function loadHome(api) {
         return Promise.all([
-            api.getCompilations(null).catch(function (error) {
-                debugLog('warn', 'home:compilations:error', { error: error.message || String(error) });
+            api.getContentAreas().catch(function (error) {
+                debugLog('warn', 'home:contentareas:error', { error: error.message || String(error) });
                 return [];
             }),
             api.getContentAreaElements(null, [], null, 0, LIMIT).catch(function (error) {
@@ -28,7 +28,7 @@
                 return [];
             })
         ]).then(function (data) {
-            var compilations = data[0] || [];
+            var areas = sortHomeAreas(asArray(data[0]));
             var videos = data[1] || [];
             var categories = [{
                 kind: 'nav',
@@ -39,24 +39,10 @@
             }];
             var rows = [];
 
-            compilations.slice(0, 18).forEach(function (compilation) {
-                var type = nativeCompilationType(compilation);
-                var id = compilation.id;
-                var title = compilation.displayName || compilation.name || 'Selection';
+            areas.forEach(function (area) {
+                var item = mapHomeArea(area);
 
-                categories.push({
-                    kind: 'nav',
-                    title: title,
-                    subtitle: 'Videos',
-                    image: pickImage(compilation.images),
-                    route: {
-                        type: 'catalog',
-                        compilationId: type === 'compilation' ? id : null,
-                        groupId: type === 'group' ? id : null,
-                        compilationName: title,
-                        offset: 0
-                    }
-                });
+                if (item) categories.push(item);
             });
 
             if (categories.length) rows.push({ title: 'Categories', items: categories });
@@ -104,6 +90,8 @@
         var offset = route.offset || 0;
 
         return loadCatalogPage(route, api, offset, LIMIT).then(function (elems) {
+            elems = asArray(elems);
+
             var items = offset ? [] : [filterMenuItem(route)];
 
             elems.forEach(function (asset) {
@@ -125,10 +113,53 @@
 
     function loadCatalogPage(route, api, offset, limit) {
         if (route.groupId) {
-            return api.getContentGroupElements(route.groupId, route.filters || [], route.sort || null, offset, limit);
+            return api.getContentGroupElements(route.groupId, route.filters || [], route.sort || null, offset, limit).catch(function (error) {
+                debugLog('warn', 'catalog:content-group-filtered:error', {
+                    groupId: route.groupId,
+                    offset: offset || 0,
+                    limit: limit || LIMIT,
+                    error: error.message || String(error),
+                    status: error.status || error.decode_code || ''
+                });
+
+                return api.getContentGroupLegacyElements(route.groupId, offset, limit);
+            });
         }
 
         return api.getContentAreaElements(route.compilationId || null, route.filters || [], route.sort || null, offset, limit);
+    }
+
+    function sortHomeAreas(areas) {
+        return asArray(areas).filter(function (area) {
+            return area && area.active !== false && area.assetId;
+        }).sort(function (left, right) {
+            var a = typeof left.contentAreaLocation === 'number' ? left.contentAreaLocation : 9999;
+            var b = typeof right.contentAreaLocation === 'number' ? right.contentAreaLocation : 9999;
+            return a - b;
+        });
+    }
+
+    function mapHomeArea(area) {
+        var title = textValue(area.name) || textValue(area.title) || textValue(area.displayName) || 'Selection';
+        var subtitle = textValue(area.type) || textValue(area.entityType) || 'Videos';
+
+        return {
+            kind: 'nav',
+            title: title,
+            subtitle: subtitle,
+            image: pickImage(area.images),
+            route: {
+                type: 'catalog',
+                compilationId: null,
+                groupId: area.assetId,
+                compilationName: title,
+                offset: 0
+            }
+        };
+    }
+
+    function textValue(value) {
+        return typeof value === 'string' && value ? value : '';
     }
 
     function filterMenuItem(route) {
@@ -340,6 +371,8 @@
         if (value.items && Object.prototype.toString.call(value.items) === '[object Array]') return value.items;
         if (value.elements && Object.prototype.toString.call(value.elements) === '[object Array]') return value.elements;
         if (value.results && Object.prototype.toString.call(value.results) === '[object Array]') return value.results;
+        if (value.content && Object.prototype.toString.call(value.content) === '[object Array]') return value.content;
+        if (value.assets && Object.prototype.toString.call(value.assets) === '[object Array]') return value.assets;
         if (typeof value.length === 'number') return Array.prototype.slice.call(value);
         return [];
     }
