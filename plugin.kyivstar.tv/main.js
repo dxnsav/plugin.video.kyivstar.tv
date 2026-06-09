@@ -10,7 +10,7 @@
     var DEFAULT_LOCALE = 'uk_UA';
     var USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64; rv:138.0) Gecko/20100101 Firefox/138.0';
     var REFERER = 'https://tv.kyivstar.ua/';
-    var LIMIT = 24;
+    var LIMIT = 20;
     var HOME_LIMIT = 14;
     var NATIVE_MAIN_ROWS = 6;
     var CACHE_CHANNELS_MS = 15 * 60 * 1000;
@@ -411,7 +411,7 @@
         var page = Math.max(1, Number(params && params.page) || 1);
         var offset = (page - 1) * LIMIT;
 
-        api.getContentAreaElements(parsed.compilationId, [], null, offset, LIMIT).then(function (assets) {
+        loadNativeListPage(api, parsed, offset, LIMIT).then(function (assets) {
             var cards = asArray(assets).map(mapAsset).map(mapNativeCard).filter(Boolean);
 
             if (!cards.length && page === 1) {
@@ -514,16 +514,23 @@
 
     function filterNativeCompilations(compilations) {
         return asArray(compilations).filter(function (item) {
-            return item && item.compilationElementType !== 'CONTENT_GROUP';
+            return item && item.id;
         });
     }
 
     function loadNativeRow(api, compilation) {
         var title = compilation ? (compilation.displayName || compilation.name || 'Videos') : 'Videos';
         var id = compilation ? compilation.id : null;
-        var url = nativeListUrl(id);
+        var type = compilation && compilation.compilationElementType === 'CONTENT_GROUP' ? 'group' : 'compilation';
+        var url = nativeListUrl(id, type);
+        var parsed = {
+            url: url,
+            title: title,
+            compilationId: type === 'compilation' ? id : null,
+            groupId: type === 'group' ? id : null
+        };
 
-        return api.getContentAreaElements(id, [], null, 0, LIMIT).then(function (assets) {
+        return loadNativeListPage(api, parsed, 0, LIMIT).then(function (assets) {
             var cards = asArray(assets).map(mapAsset).map(mapNativeCard).filter(Boolean);
 
             return {
@@ -546,28 +553,78 @@
         });
     }
 
-    function nativeListUrl(compilationId) {
-        return compilationId ? 'kyivstar/compilation/' + encodeURIComponent(compilationId) : 'kyivstar/videos';
+    function loadNativeListPage(api, parsed, offset, limit) {
+        if (parsed.groupId) return loadNativeGroupPage(api, parsed.groupId, offset, limit);
+
+        return api.getContentAreaElements(parsed.compilationId, [], parsed.sortId || null, offset, limit);
+    }
+
+    function loadNativeGroupPage(api, groupId, offset, limit) {
+        return api.getContentAreaElements(groupId, [], null, offset, limit).then(function (assets) {
+            assets = asArray(assets);
+            if (assets.length) return assets;
+
+            return api.getCompilations(groupId).then(function (children) {
+                children = filterNativeCompilations(children);
+                if (!children.length) return [];
+
+                return loadFirstNonEmptyChildPage(api, children, 0, offset, limit);
+            });
+        });
+    }
+
+    function loadFirstNonEmptyChildPage(api, children, index, offset, limit) {
+        var child = children[index];
+        var type;
+        var parsed;
+
+        if (!child) return Promise.resolve([]);
+
+        type = child.compilationElementType === 'CONTENT_GROUP' ? 'group' : 'compilation';
+        parsed = {
+            compilationId: type === 'compilation' ? child.id : null,
+            groupId: type === 'group' ? child.id : null
+        };
+
+        return loadNativeListPage(api, parsed, offset, limit).then(function (assets) {
+            assets = asArray(assets);
+            if (assets.length || index >= children.length - 1) return assets;
+            return loadFirstNonEmptyChildPage(api, children, index + 1, offset, limit);
+        });
+    }
+
+    function nativeListUrl(compilationId, type) {
+        if (!compilationId) return 'kyivstar/videos';
+        return 'kyivstar/' + (type === 'group' ? 'group' : 'compilation') + '/' + encodeURIComponent(compilationId);
     }
 
     function parseNativeList(params) {
         var url = params && params.url ? String(params.url) : 'kyivstar/videos';
         var title = params && params.title ? params.title : 'Videos';
-        var prefix = 'kyivstar/compilation/';
+        var compilationPrefix = 'kyivstar/compilation/';
+        var groupPrefix = 'kyivstar/group/';
         var compilationId = null;
+        var groupId = null;
 
-        if (url.indexOf(prefix) === 0) {
+        if (url.indexOf(compilationPrefix) === 0) {
             try {
-                compilationId = decodeURIComponent(url.substr(prefix.length));
+                compilationId = decodeURIComponent(url.substr(compilationPrefix.length));
             } catch (error) {
-                compilationId = url.substr(prefix.length);
+                compilationId = url.substr(compilationPrefix.length);
+            }
+        } else if (url.indexOf(groupPrefix) === 0) {
+            try {
+                groupId = decodeURIComponent(url.substr(groupPrefix.length));
+            } catch (groupError) {
+                groupId = url.substr(groupPrefix.length);
             }
         }
 
         return {
             url: url,
             title: title,
-            compilationId: compilationId
+            compilationId: compilationId,
+            groupId: groupId
         };
     }
 
