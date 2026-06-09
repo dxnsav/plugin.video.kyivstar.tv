@@ -1,6 +1,7 @@
 (function () {
     'use strict';
 
+    // 00-state.js
     var PLUGIN_BUILD = '2026-06-09-native-lampa-source';
     var PLUGIN_FLAG = '__kyivstar_tv_lampa_loaded_' + PLUGIN_BUILD;
     var COMPONENT = 'kyivstar_tv';
@@ -54,6 +55,7 @@
     DEFAULTS[KEYS.cacheKeys] = [];
     DEFAULTS[KEYS.logs] = [];
 
+    // 10-boot.js
     function boot() {
         if (!window.Lampa || !window.$ || !Lampa.Storage) {
             setTimeout(boot, 200);
@@ -182,6 +184,7 @@
         });
     }
 
+    // 20-settings-registration.js
     function addSettings() {
         if (settingsAdded) return;
 
@@ -277,6 +280,7 @@
         if (Lampa.Controller && Lampa.Controller.toggle) Lampa.Controller.toggle('settings');
     }
 
+    // 30-lampa-integration.js
     function addSideMenuEntry() {
         var list = $('.menu .menu__list').eq(0);
 
@@ -355,6 +359,7 @@
         return source;
     }
 
+    // 40-native-source.js
     function sourceMain(params, onComplete, onError) {
         var api = new KyivstarApi();
         var nextOffset = NATIVE_MAIN_ROWS;
@@ -714,6 +719,7 @@
         return movie;
     }
 
+    // 50-search.js
     function createSearchSource() {
         var api = new KyivstarApi();
 
@@ -855,6 +861,7 @@
         pushRoute({ type: 'home' }, TITLE);
     }
 
+    // 55-settings-menu.js
     function showSettingsMenu(api, onBack) {
         var session = setting(KEYS.session);
 
@@ -1099,6 +1106,7 @@
         return value ? 'set' : 'empty';
     }
 
+    // 60-custom-component.js
     function KyivstarComponent(object) {
         var self = this;
         var route = object.route || { type: 'root' };
@@ -1354,6 +1362,7 @@
         if (window.Navigator && Navigator.move) Navigator.move(direction);
     }
 
+    // 70-routes-mappers.js
     function routeTitle(route) {
         if (route.type === 'channels') return route.groupName || 'Live TV';
         if (route.type === 'catalog') return route.compilationName || 'Videos';
@@ -1678,6 +1687,7 @@
         return [];
     }
 
+    // 80-auth-playback.js
     function askText(title, value, done) {
         if (Lampa.Input && Lampa.Input.edit) {
             try {
@@ -1780,6 +1790,7 @@
         return url + '|User-Agent="' + encodeURIComponent(USER_AGENT) + '"&Referer="' + encodeURIComponent(REFERER) + '"';
     }
 
+    // 90-api.js
     function KyivstarApi() {
         this.network = Lampa.Reguest ? new Lampa.Reguest() : null;
     }
@@ -2352,6 +2363,7 @@
         return normalized;
     }
 
+    // 95-utils.js
     function normalizePhone(value) {
         var digits = String(value || '').replace(/\D/g, '');
 
@@ -2512,6 +2524,7 @@
             '</svg>';
     }
 
+    // 99-styles.js
     function addStyles() {
         var existing = document.getElementById('kyivstar-tv-styles');
 

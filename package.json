@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "build:lampa": "node scripts/build-lampa-plugin.js",
+    "check:lampa": "node --check plugin.kyivstar.tv/main.js"
+  }
+}
