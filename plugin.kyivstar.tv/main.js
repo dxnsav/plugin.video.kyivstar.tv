@@ -442,6 +442,7 @@
     function sourceFull(params, onComplete, onError) {
         var api = new KyivstarApi();
         var item = extractKyivstarItem(params);
+        var completed = false;
 
         if (!item) {
             if (typeof onError === 'function') onError();
@@ -449,10 +450,17 @@
         }
 
         function complete(mapped) {
+            if (completed) return;
+            completed = true;
+
             onComplete({
                 movie: buildFullMovie(mapped || item)
             });
         }
+
+        setTimeout(function () {
+            complete(item);
+        }, 2500);
 
         if (!item.assetId || item.kind === 'channel') {
             complete(item);
