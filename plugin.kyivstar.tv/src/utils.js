@@ -296,7 +296,7 @@
     function normalizeSeasons(seasons) {
         return arrayFromAny(seasons).map(function (season, index) {
             var number = seasonNumber(season);
-            var episodes = Number(season && (season.numberOfEpisodes || season.episodeCount || season.episodesCount || season.episodes)) || 0;
+            var episodes = seasonEpisodeCount(season);
 
             return {
                 id: season && (season.id || season.assetId) || number || index + 1,
@@ -317,6 +317,67 @@
         });
 
         return total;
+    }
+
+    function seasonEpisodeCount(season) {
+        var episodes;
+
+        if (!season) return 0;
+
+        if (Object.prototype.toString.call(season.episodes) === '[object Array]') {
+            return season.episodes.length;
+        }
+
+        episodes = firstNumber([
+            season.numberOfEpisodes,
+            season.episodeCount,
+            season.episodesCount,
+            season.episodes_count,
+            season.totalEpisodes,
+            season.totalEpisodeCount,
+            season.assetsCount,
+            season.itemsCount,
+            season.size
+        ]);
+
+        return episodes || 0;
+    }
+
+    function assetEpisodeCount(raw, seasons) {
+        var counted = countSeasonEpisodes(seasons);
+        var direct = firstNumber([
+            raw && raw.numberOfEpisodes,
+            raw && raw.episodeCount,
+            raw && raw.episodesCount,
+            raw && raw.episodes_count,
+            raw && raw.totalEpisodes,
+            raw && raw.totalEpisodeCount,
+            raw && raw.assetsCount,
+            raw && raw.itemsCount
+        ]);
+
+        return counted || direct || null;
+    }
+
+    function assetSeasonCount(raw, seasons) {
+        return firstNumber([
+            raw && raw.activeSeasonsCount,
+            raw && raw.numberOfSeasons,
+            raw && raw.seasonsCount,
+            raw && raw.seasonCount,
+            raw && raw.totalSeasons
+        ]) || asArray(seasons).length;
+    }
+
+    function firstNumber(values) {
+        var number;
+
+        for (var i = 0; i < values.length; i++) {
+            number = Number(values[i]);
+            if (number > 0) return number;
+        }
+
+        return 0;
     }
 
     function normalizeRating(raw) {
