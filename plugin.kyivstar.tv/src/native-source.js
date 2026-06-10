@@ -241,9 +241,11 @@
 
             addKyivstarFullButton(event.body, item);
             patchKyivstarFullLabels(event.body, movie);
+            patchUnknownEpisodeCountLabels(event.body, movie);
             patchDanglingFullSeparators(event.body);
             setTimeout(function () {
                 patchKyivstarFullLabels(event.body, movie);
+                patchUnknownEpisodeCountLabels(event.body, movie);
                 patchDanglingFullSeparators(event.body);
             }, 250);
         });
@@ -346,6 +348,21 @@
             this.nodeValue = this.nodeValue
                 .replace(/\s+•\s*$/g, '')
                 .replace(/^\s*•\s+/g, '');
+        });
+    }
+
+    function patchUnknownEpisodeCountLabels(body, movie) {
+        var root = $(body);
+
+        if (!movie || movie.source !== COMPONENT || !movie.number_of_seasons || movie.number_of_episodes) return;
+
+        root.find('*').contents().each(function () {
+            var value;
+
+            if (this.nodeType !== 3 || !this.nodeValue) return;
+
+            value = this.nodeValue.replace(/\s*0\s+(серій|серии|серий|episodes)\b/gi, '');
+            if (value !== this.nodeValue) this.nodeValue = value;
         });
     }
 
