@@ -1104,6 +1104,8 @@
         var isSeries = item.kind === 'nav' || raw.assetType === 'SERIES';
         var image = item.image || pickImage(raw.images) || raw.image || '';
         var background = pickBackdrop(raw.images) || image;
+        var backdrops = background && background !== image ? [{ file_path: background, url: background }] : [];
+        var posters = image ? [{ file_path: image, url: image }] : [];
         var release = raw.release_date || raw.releaseDate || item.subtitle || '';
         var date = subtitleYear(release);
         var ratingInfo = normalizeRating(raw);
@@ -1151,7 +1153,7 @@
             keywords: { results: keywords, keywords: keywords },
             videos: { results: [] },
             credits: { cast: cast, crew: directors },
-            images: { posters: [], backdrops: [] },
+            images: { posters: posters, backdrops: backdrops },
             alternative_titles: { titles: [] },
             names: [],
             tagline: raw.tagline || raw.slogan || '',
@@ -1167,7 +1169,7 @@
             img: image,
             background_image: background,
             poster_path: '',
-            backdrop_path: '',
+            backdrop_path: background || '',
             _kyivstar: item
         };
 

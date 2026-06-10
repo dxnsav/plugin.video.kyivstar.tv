@@ -10,6 +10,7 @@
         return {
             'x-vidmind-device-id': setting(KEYS.deviceId),
             'x-vidmind-device-type': 'WEB',
+            'x-vidmind-image-sizes': '2_3_XL,16_9_XL,16_9_L,1_1_XL',
             'x-vidmind-locale': setting(KEYS.locale)
         };
     };

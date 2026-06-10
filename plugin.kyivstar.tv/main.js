@@ -1740,6 +1740,8 @@
         var isSeries = item.kind === 'nav' || raw.assetType === 'SERIES';
         var image = item.image || pickImage(raw.images) || raw.image || '';
         var background = pickBackdrop(raw.images) || image;
+        var backdrops = background && background !== image ? [{ file_path: background, url: background }] : [];
+        var posters = image ? [{ file_path: image, url: image }] : [];
         var release = raw.release_date || raw.releaseDate || item.subtitle || '';
         var date = subtitleYear(release);
         var ratingInfo = normalizeRating(raw);
@@ -1787,7 +1789,7 @@
             keywords: { results: keywords, keywords: keywords },
             videos: { results: [] },
             credits: { cast: cast, crew: directors },
-            images: { posters: [], backdrops: [] },
+            images: { posters: posters, backdrops: backdrops },
             alternative_titles: { titles: [] },
             names: [],
             tagline: raw.tagline || raw.slogan || '',
@@ -1803,7 +1805,7 @@
             img: image,
             background_image: background,
             poster_path: '',
-            backdrop_path: '',
+            backdrop_path: background || '',
             _kyivstar: item
         };
 
@@ -2660,16 +2662,42 @@
     }
 
     function pickBackdrop(images) {
+        var best = null;
+        var bestScore = 0;
+
         images = asArray(images);
         if (!images.length) return '';
 
         for (var i = 0; i < images.length; i++) {
-            if (images[i].url && /16_9|landscape|backdrop|background/i.test(images[i].url + ' ' + (images[i].type || ''))) {
-                return images[i].url;
+            var image = images[i] || {};
+            var haystack = [
+                image.url,
+                image.type,
+                image.imageType,
+                image.name,
+                image.size,
+                image.ratio,
+                image.aspectRatio
+            ].join(' ');
+            var width = Number(image.width || image.w || 0);
+            var height = Number(image.height || image.h || 0);
+            var ratio = width && height ? width / height : 0;
+            var score = 0;
+
+            if (!image.url) continue;
+
+            if (/16[_:-]?9|16x9|landscape|backdrop|background|cover|hero|wide/i.test(haystack)) score += 100;
+            if (ratio > 1.45) score += 80;
+            if (/XL|XXL|ORIGINAL|FHD|HD/i.test(haystack)) score += 20;
+            if (/2[_:-]?3|poster|portrait/i.test(haystack)) score -= 100;
+
+            if (score > bestScore) {
+                best = image;
+                bestScore = score;
             }
         }
 
-        return '';
+        return best ? best.url : '';
     }
 
     function asArray(value) {
@@ -2813,6 +2841,7 @@
         return {
             'x-vidmind-device-id': setting(KEYS.deviceId),
             'x-vidmind-device-type': 'WEB',
+            'x-vidmind-image-sizes': '2_3_XL,16_9_XL,16_9_L,1_1_XL',
             'x-vidmind-locale': setting(KEYS.locale)
         };
     };
