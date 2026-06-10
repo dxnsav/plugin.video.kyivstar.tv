@@ -1,36 +1,164 @@
-# Kyivstar TV plugin for Kodi media player.
+# Kyivstar TV for Lampa
 
-Kyivstar TV is an interactive television with legal content from Ukrainian and international TV channels in HD and standard quality, as well as a wide library of movies, TV series, cartoons and shows.
+Плагин подключает легальный каталог и просмотр Kyivstar TV к Lampa: поиск, карточки фильмов/сериалов, онлайн-воспроизведение, сезоны/серии и служебные настройки. Это не бесплатный пиратский доступ. Доступность фильмов, сериалов, каналов и потоков определяется вашим аккаунтом Kyivstar TV, подпиской, регионом и правами на конкретный контент.
 
-This plugin is based on: https://github.com/david-hazi/plugin.video.sweettv
+Проект вырос из идеи/опыта старого Kyivstar TV плагина, но текущая основная цель репозитория - Lampa-плагин с более детальной интеграцией онлайн-фильмов и сериалов.
 
-# Installation:
+## Установка в Lampa
 
-To get automatic updates you can install my [repository](https://github.com/TVHomeNetwork/kodi.repository).
+В Lampa откройте раздел установки плагинов и добавьте ссылку:
 
-Or download any release version from [Releases](https://github.com/TVHomeNetwork/plugin.video.kyivstar.tv/releases).
+```text
+https://dxnsav.github.io/plugin.video.kyivstar.tv/plugin.kyivstar.tv/main.js
+```
 
-Or to get fresh version, clone this repository as zip. Unpack somwhere. Rename the top directory from *plugin.video.kyivstar.tv-main* to *plugin.video.kyivstar.tv*.
-Pack back to zip and install this file in Kodi.
+После установки перезапустите Lampa или обновите список плагинов. Если нужно принудительно подтянуть свежую версию во время тестов, можно временно добавить cache-buster:
 
-# Setup:
+```text
+https://dxnsav.github.io/plugin.video.kyivstar.tv/plugin.kyivstar.tv/main.js?v=<commit-or-any-token>
+```
 
-The plugin works only if the user has logged in to his account. If you don't have an account, you can use the free option to watch channels from Kyivstar TV. To do this, you need to log in as anonymous.
- 1. After installation, go to *Settings->Add-ons->My add-ons->Video add-ons->Kyivstar TV* and select *Configure*.
- 2. In *Account* section, click on *Login* button. You have three options to log in: with phone number(need to input full number, 38xxxxxxxxxx), with personal account(in username field you need specify personal account number) and as anonymous.
- 3. In *M3U* section, specify the file name and directory path in which the file will be ctreated.
- 4. In *EPG* section, we do the same. You can also specify the time of daily update.
- 5. Click OK and plugin will create two files.
-It will take more time to create EPG file, because for each channel there are need separate request. Options to contol this process are in *EPG->Save options*.
+## Что добавляет плагин
 
-# Setup IPTV Simple Client
+- источник `Kyivstar TV` в нативном поиске Lampa;
+- кнопку Kyivstar TV в карточке фильма или сериала;
+- открытие Kyivstar TV карточек в нативном full-card интерфейсе Lampa;
+- просмотр фильмов через Kyivstar TV player flow;
+- выбор сезонов и серий для сериалов;
+- подтягивание рейтингов, жанров, стран, описаний, тегов и реакций из Kyivstar TV API, когда эти данные доступны;
+- настройки авторизации, локали, stream headers и диагностики.
 
-First, you need install it. Go to *Settings->Add-ons->Install from repository->PVR clients->PVR IPTV Simple Client* and press *Install*.
- 1. Go to settings *Settings->Add-ons->My add-ons->PVR Clients->IPTV Simple Client*
- 2. Select *Add add-on configuration*
- 3. In *General* section, set *Name* to 'kyivstar' (or any other), *Location* to 'local path' and in *M3U playlist path* specify path to the file that was created previously.
- 4. In *EPG* section, again we do the same.
- 5. In *Catchup* section, turn on *Enable Catchup*, turn off *Play from EPG in Live TV mode (using timeshift)*, set *Buffer before program start* and *Buffer after program end* to 0.
+## Вход в аккаунт
 
-[More info about IPTV Simple Client](https://kodi.wiki/view/Add-on:PVR_IPTV_Simple_Client)
+Откройте:
 
+```text
+Настройки -> Kyivstar TV
+```
+
+Доступные варианты входа:
+
+- `Anonymous` - гостевой режим. Подходит только для бесплатного/ограниченного контента, который Kyivstar TV отдаёт без аккаунта.
+- `Phone OTP` - вход по номеру телефона и SMS-коду.
+- `Personal account` - вход по номеру лицевого счёта и паролю, если у вас такой способ доступен.
+
+### Phone OTP
+
+1. В настройках выберите `Login type: Phone OTP`.
+2. Введите телефон в международном формате, например:
+
+```text
+380XXXXXXXXX
+```
+
+3. Нажмите `Send SMS code now`.
+4. Введите полученный SMS-код в поле `SMS code`.
+5. Нажмите `Refresh session`.
+
+Если SMS не приходит, проверьте формат номера, доступность Kyivstar TV аккаунта для этого номера и логи плагина.
+
+### Personal account
+
+1. Выберите `Login type: Personal account`.
+2. Заполните `Personal account`.
+3. Заполните `Password`.
+4. Нажмите `Refresh session`.
+
+### Anonymous
+
+1. Выберите `Login type: Anonymous`.
+2. Нажмите `Refresh session`.
+
+Этот режим не обходит ограничения Kyivstar TV. Если контент требует подписку или авторизацию, он не будет доступен.
+
+## Настройки
+
+Основные пункты:
+
+- `Locale` - язык, который плагин отправляет в Kyivstar TV API. Используется для локализованных названий, жанров и описаний, если API их возвращает.
+- `CORS proxy` - опциональный прокси для окружений, где прямые запросы к Kyivstar TV API недоступны.
+- `Append stream headers` - рекомендуется держать включённым. Плагин добавляет служебные headers к HLS URL, если это нужно для воспроизведения.
+- `Send SMS code now` - отправить OTP-код на сохранённый номер телефона.
+- `Refresh session` - перелогиниться текущим способом и обновить сессию.
+- `Diagnostics / logs` - открыть диагностические логи запросов плагина.
+- `Clear phone OTP state` - очистить временный OTP state и SMS-код.
+- `Log out / clear session` - удалить локальную сессию и кеш Kyivstar TV.
+
+## Как пользоваться
+
+### Через поиск Lampa
+
+1. Откройте нативный поиск Lampa.
+2. Введите название фильма или сериала.
+3. Выберите вкладку `Kyivstar TV`.
+4. Откройте найденный элемент.
+5. В карточке нажмите кнопку Kyivstar TV для просмотра.
+
+### Через карточку фильма или сериала
+
+Если Lampa открыла карточку, для которой найден Kyivstar TV вариант, на странице появится кнопка Kyivstar TV. Нажатие запускает просмотр или, для сериалов, открывает выбор сезона/серии.
+
+### Сериалы
+
+Для сериалов плагин старается получить структуру сезонов и эпизодов из Kyivstar TV API. Если API отдаёт только список сезонов без episode count, плагин не показывает ложное `0 серий`; для диагностики можно проверить raw data через DevTools.
+
+## Диагностика
+
+В DevTools Lampa полезны такие команды:
+
+```js
+KyivstarTVPlugin.logs()
+```
+
+```js
+KyivstarTVPlugin.clearLogs()
+```
+
+```js
+KyivstarTVPlugin.dumpSeasons('<assetId>', [1, 2])
+```
+
+В логах плагина ищите префикс:
+
+```text
+[KyivstarTV]
+```
+
+Типовые причины проблем:
+
+- сессия истекла - нажмите `Refresh session`;
+- контент недоступен без подписки;
+- контент недоступен в текущем регионе;
+- Kyivstar TV API вернул ошибку 500 для конкретного asset;
+- в Lampa закеширована старая версия плагина - добавьте `?v=<new-token>` к URL установки;
+- выключены stream headers, хотя конкретный поток требует referer/user-agent metadata.
+
+## Разработка
+
+Основной файл для Lampa:
+
+```text
+plugin.kyivstar.tv/main.js
+```
+
+Он генерируется из файлов:
+
+```text
+plugin.kyivstar.tv/src/*.js
+plugin.kyivstar.tv/i18n/*.json
+```
+
+Не редактируйте `main.js` вручную для обычных изменений. Правьте source-файлы и собирайте:
+
+```bash
+npm run build:lampa
+npm run check:lampa
+```
+
+После изменений коммитьте и source-файлы, и пересобранный `plugin.kyivstar.tv/main.js`.
+
+Дополнительная документация по структуре исходников находится в:
+
+```text
+plugin.kyivstar.tv/src/README.md
+```
