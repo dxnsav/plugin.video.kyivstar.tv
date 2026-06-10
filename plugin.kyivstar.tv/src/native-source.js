@@ -167,6 +167,7 @@
         var api = new KyivstarApi();
         var item = extractKyivstarItem(params);
         var completed = false;
+        var fallbackTimer;
 
         if (!item) {
             if (typeof onError === 'function') onError();
@@ -176,15 +177,16 @@
         function complete(mapped) {
             if (completed) return;
             completed = true;
+            clearTimeout(fallbackTimer);
 
             onComplete({
                 movie: buildFullMovie(mapped || item)
             });
         }
 
-        setTimeout(function () {
+        fallbackTimer = setTimeout(function () {
             complete(item);
-        }, 2500);
+        }, isKyivstarSeries(item) ? 9000 : 2500);
 
         if (!item.assetId || item.kind === 'channel') {
             complete(item);
@@ -210,7 +212,7 @@
                 return;
             }
 
-            complete(mapAsset(asset));
+            return enrichSeriesEpisodeCounts(api, mapAsset(asset)).then(complete);
         }).catch(function (error) {
             debugLog('warn', 'api:full:details-error', {
                 assetId: item.assetId,
@@ -219,6 +221,74 @@
             });
             complete(item);
         });
+    }
+
+    function enrichSeriesEpisodeCounts(api, item) {
+        var raw = item && item.raw ? item.raw : {};
+        var seasons = asArray(raw.seasons);
+        var seasonNumbers;
+
+        if (!item || !item.assetId || !isKyivstarSeries(item) || !seasons.length) {
+            return Promise.resolve(item);
+        }
+
+        seasonNumbers = normalizeRequestedSeasonNumbers([], seasons);
+
+        return Promise.all(seasonNumbers.map(function (number) {
+            return loadAllSeasonEpisodes(api, item.assetId, number, 0, []).then(function (episodes) {
+                var count = asArray(episodes).length;
+
+                setRawSeasonEpisodeCount(seasons, number, count);
+
+                return count;
+            }).catch(function (error) {
+                debugLog('warn', 'api:full:season-count-error', {
+                    assetId: item.assetId || '',
+                    season: number,
+                    error: error.message || String(error),
+                    status: error.status || error.decode_code || ''
+                });
+
+                return 0;
+            });
+        })).then(function (counts) {
+            var total = counts.reduce(function (sum, count) {
+                return sum + (Number(count) || 0);
+            }, 0);
+
+            if (total) {
+                raw.numberOfEpisodes = total;
+                raw.totalEpisodeCount = total;
+            }
+
+            debugLog('info', 'api:full:season-counts-ok', {
+                assetId: item.assetId || '',
+                seasons: seasonNumbers,
+                counts: counts,
+                total: total
+            });
+
+            return item;
+        });
+    }
+
+    function setRawSeasonEpisodeCount(seasons, number, count) {
+        var season;
+
+        if (!count) return;
+
+        for (var i = 0; i < seasons.length; i++) {
+            if (seasonNumber(seasons[i]) === number) {
+                season = seasons[i];
+                break;
+            }
+        }
+
+        if (!season) return;
+
+        season.episodeCount = count;
+        season.numberOfEpisodes = count;
+        season.episodesCount = count;
     }
 
     function sourceImg(src) {
