@@ -23,6 +23,7 @@ https://dxnsav.github.io/plugin.video.kyivstar.tv/plugin.kyivstar.tv/main.js?v=<
 - источник `Kyivstar TV` в нативном поиске Lampa;
 - кнопку Kyivstar TV в карточке фильма или сериала;
 - открытие Kyivstar TV карточек в нативном full-card интерфейсе Lampa;
+- использование нативных layout-элементов Lampa, поэтому плагин нормально работает с interface mods, темами и изменёнными оболочками;
 - просмотр фильмов через Kyivstar TV player flow;
 - выбор сезонов и серий для сериалов;
 - подтягивание рейтингов, жанров, стран, описаний, тегов и реакций из Kyivstar TV API, когда эти данные доступны;
