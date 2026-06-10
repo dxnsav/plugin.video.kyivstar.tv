@@ -301,7 +301,14 @@
                 id: season && (season.id || season.assetId) || number || index + 1,
                 name: season && (season.name || season.title) || (t('season_prefix') + number),
                 season_number: number,
-                air_date: season && (season.releaseDate || season.release_date || season.air_date) || '',
+                air_date: firstApiDate([
+                    season && season.airDate,
+                    season && season.air_date,
+                    season && season.airingStartDate,
+                    season && season.startDate,
+                    season && season.releaseDate,
+                    season && season.release_date
+                ]),
                 poster_path: season && (season.poster_path || season.image || pickImage(season.images)) || ''
             };
 
@@ -343,6 +350,44 @@
         ]);
 
         return episodes || 0;
+    }
+
+    function firstApiDate(values) {
+        var date;
+
+        for (var i = 0; i < values.length; i++) {
+            date = normalizeApiDate(values[i]);
+            if (date) return date;
+        }
+
+        return '';
+    }
+
+    function normalizeApiDate(value) {
+        var text;
+        var number;
+        var date;
+
+        if (value === null || value === undefined || value === '') return '';
+
+        if (typeof value === 'number') {
+            number = value;
+        } else {
+            text = String(value);
+            if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+            if (/^\d{4}$/.test(text)) return text + '-01-01';
+            if (/^\d+$/.test(text)) number = Number(text);
+            else {
+                date = new Date(text);
+                return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+            }
+        }
+
+        if (!number || number < 1) return '';
+        if (number < 10000000000) number *= 1000;
+
+        date = new Date(number);
+        return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
     }
 
     function assetEpisodeCount(raw, seasons) {

@@ -754,9 +754,11 @@
             var fullCard = info.card || card;
 
             return Promise.all(seasons.map(function (season) {
+                var rawSeason = findRawSeason(info.asset, season);
+
                 return loadAllSeasonEpisodes(api, item.assetId, season, 0, []).then(function (episodes) {
                     var mapped = episodes.map(function (episode, index) {
-                        return mapLampaEpisode(episode, season, index, fullCard);
+                        return mapLampaEpisode(episode, season, index, fullCard, rawSeason);
                     }).filter(Boolean);
 
                     latestEpisodeContext = {
@@ -773,7 +775,7 @@
                         name: t('season_prefix') + season,
                         season_number: season,
                         vote_average: seasonRating(info.asset, season) || (fullCard && fullCard.vote_average) || 0,
-                        air_date: firstAirDate(mapped) || (fullCard && fullCard.first_air_date) || '',
+                        air_date: seasonAirDate(rawSeason) || firstAirDate(mapped) || (fullCard && (fullCard.first_air_date || fullCard.release_date)) || '',
                         overview: (fullCard && fullCard.overview) || '',
                         episodes: mapped,
                         seasons_count: info.seasonsCount || seasons.length
@@ -1549,7 +1551,7 @@
             seasonNumber: asset.seasonNumber || asset.season_number || asset.season || null,
             episodeNumber: asset.episodeNumber || asset.episode_number || asset.episode || asset.number || null,
             duration: asset.duration || null,
-            releaseDate: asset.releaseDate || asset.release_date || null,
+            releaseDate: asset.releaseDate || asset.release_date || asset.airDate || asset.air_date || asset.airingStartDate || null,
             images: asArray(asset.images).slice(0, 2)
         };
     }
@@ -1562,14 +1564,16 @@
         };
     }
 
-    function mapLampaEpisode(episode, season, index, card) {
+    function mapLampaEpisode(episode, season, index, card, rawSeason) {
         var mapped = mapAsset(episode);
         var raw = mapped.raw || episode || {};
         var episodeNumber = parseEpisodeNumber(raw, index);
-        var release = raw.airDate || raw.releaseDate || raw.release_date || raw.startDate || '';
+        var release = episodeAirDate(raw, rawSeason, card);
         var runtime = raw.duration ? Math.round(Number(raw.duration) / 60) : 0;
 
         mapped.kind = 'episode';
+        mapped.releaseDate = release;
+        mapped.seasonReleaseDate = seasonAirDate(rawSeason);
 
         return {
             id: raw.assetId || mapped.assetId || [card && card.id, season, episodeNumber].join(':'),
@@ -1581,7 +1585,7 @@
             original_name: card && (card.original_name || card.name || card.title),
             episode_number: episodeNumber,
             season_number: season,
-            air_date: formatLampaDate(release),
+            air_date: release,
             runtime: runtime || 0,
             vote_average: itemRating(mapped) || 0,
             still_path: '',
@@ -1599,21 +1603,48 @@
         return number > 0 ? number : index + 1;
     }
 
-    function formatLampaDate(value) {
-        if (!value) return '';
-
-        value = String(value);
-        if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-
-        return subtitleYear(value);
-    }
-
     function firstAirDate(episodes) {
         for (var i = 0; i < episodes.length; i++) {
             if (episodes[i].air_date) return episodes[i].air_date;
         }
 
         return '';
+    }
+
+    function findRawSeason(asset, number) {
+        var seasons = asArray(asset && asset.seasons);
+
+        for (var i = 0; i < seasons.length; i++) {
+            if (seasonNumber(seasons[i]) === number) return seasons[i];
+        }
+
+        return null;
+    }
+
+    function seasonAirDate(season) {
+        return firstApiDate([
+            season && season.airDate,
+            season && season.air_date,
+            season && season.airingStartDate,
+            season && season.startDate,
+            season && season.releaseDate,
+            season && season.release_date
+        ]);
+    }
+
+    function episodeAirDate(raw, season, card) {
+        return firstApiDate([
+            raw && raw.airDate,
+            raw && raw.air_date,
+            raw && raw.airingStartDate,
+            raw && raw.broadcastStartDate,
+            raw && raw.startDate,
+            raw && raw.releaseDate,
+            raw && raw.release_date,
+            seasonAirDate(season),
+            card && card.first_air_date,
+            card && card.release_date
+        ]);
     }
 
     function seasonRating(asset, season) {
@@ -3667,7 +3698,14 @@
                 id: season && (season.id || season.assetId) || number || index + 1,
                 name: season && (season.name || season.title) || (t('season_prefix') + number),
                 season_number: number,
-                air_date: season && (season.releaseDate || season.release_date || season.air_date) || '',
+                air_date: firstApiDate([
+                    season && season.airDate,
+                    season && season.air_date,
+                    season && season.airingStartDate,
+                    season && season.startDate,
+                    season && season.releaseDate,
+                    season && season.release_date
+                ]),
                 poster_path: season && (season.poster_path || season.image || pickImage(season.images)) || ''
             };
 
@@ -3709,6 +3747,44 @@
         ]);
 
         return episodes || 0;
+    }
+
+    function firstApiDate(values) {
+        var date;
+
+        for (var i = 0; i < values.length; i++) {
+            date = normalizeApiDate(values[i]);
+            if (date) return date;
+        }
+
+        return '';
+    }
+
+    function normalizeApiDate(value) {
+        var text;
+        var number;
+        var date;
+
+        if (value === null || value === undefined || value === '') return '';
+
+        if (typeof value === 'number') {
+            number = value;
+        } else {
+            text = String(value);
+            if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+            if (/^\d{4}$/.test(text)) return text + '-01-01';
+            if (/^\d+$/.test(text)) number = Number(text);
+            else {
+                date = new Date(text);
+                return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+            }
+        }
+
+        if (!number || number < 1) return '';
+        if (number < 10000000000) number *= 1000;
+
+        date = new Date(number);
+        return isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
     }
 
     function assetEpisodeCount(raw, seasons) {
