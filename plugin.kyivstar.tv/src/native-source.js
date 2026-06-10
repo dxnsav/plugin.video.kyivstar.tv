@@ -753,6 +753,109 @@
         });
     }
 
+    function debugKyivstarSeasons(api, assetId, requestedSeasons) {
+        var targetAssetId = assetId || currentKyivstarAssetId();
+
+        if (!targetAssetId) {
+            return Promise.reject(new Error('No Kyivstar TV assetId found. Open a Kyivstar TV full card or pass assetId explicitly.'));
+        }
+
+        return api.getAssetInfo(targetAssetId).then(function (info) {
+            var asset = asArray(info)[0] || {};
+            var rawSeasons = asArray(asset.seasons);
+            var seasonNumbers = normalizeRequestedSeasonNumbers(requestedSeasons, rawSeasons);
+
+            return Promise.all(seasonNumbers.map(function (season) {
+                return Promise.all([
+                    api.getTvGroup(targetAssetId, season, 0, LIMIT).catch(function (error) {
+                        return { __error: formatDebugError(error) };
+                    }),
+                    api.getTvGroup(targetAssetId, season, LIMIT, LIMIT).catch(function (error) {
+                        return { __error: formatDebugError(error) };
+                    }),
+                    loadAllSeasonEpisodes(api, targetAssetId, season, 0, []).catch(function (error) {
+                        return { __error: formatDebugError(error) };
+                    })
+                ]).then(function (pages) {
+                    var page0 = pages[0];
+                    var page20 = pages[1];
+                    var all = pages[2];
+
+                    return {
+                        season: season,
+                        page0Count: asArray(page0).length,
+                        page20Count: asArray(page20).length,
+                        allCount: asArray(all).length,
+                        page0Error: page0 && page0.__error ? page0.__error : null,
+                        page20Error: page20 && page20.__error ? page20.__error : null,
+                        allError: all && all.__error ? all.__error : null,
+                        page0Sample: asArray(page0).slice(0, 3).map(slimDebugAsset),
+                        page20Sample: asArray(page20).slice(0, 3).map(slimDebugAsset)
+                    };
+                });
+            })).then(function (seasons) {
+                return {
+                    title: asset.name || asset.displayName || asset.title || '',
+                    assetId: targetAssetId,
+                    assetType: asset.assetType || '',
+                    activeSeasonsCount: asset.activeSeasonsCount || null,
+                    numberOfEpisodes: asset.numberOfEpisodes || asset.episodeCount || asset.episodesCount || asset.totalEpisodeCount || null,
+                    rawSeasons: rawSeasons,
+                    seasons: seasons,
+                    detailsSample: slimDebugAsset(asset)
+                };
+            });
+        });
+    }
+
+    function currentKyivstarAssetId() {
+        var active = Lampa.Activity && Lampa.Activity.active ? Lampa.Activity.active() : null;
+        var object = active && active.object ? active.object : {};
+        var card = object.card || object.movie || active && active.card || object;
+        var item = card && card._kyivstar ? card._kyivstar : null;
+
+        return item && item.assetId || item && item.raw && item.raw.assetId || card && card.id || '';
+    }
+
+    function normalizeRequestedSeasonNumbers(requestedSeasons, rawSeasons) {
+        var numbers = asArray(requestedSeasons).map(function (season) {
+            return parseInt(season, 10) || 0;
+        }).filter(Boolean);
+
+        if (!numbers.length) {
+            numbers = asArray(rawSeasons).map(seasonNumber).filter(Boolean);
+        }
+
+        if (!numbers.length) numbers = [1];
+
+        return numbers.filter(function (number, index) {
+            return numbers.indexOf(number) === index;
+        });
+    }
+
+    function slimDebugAsset(asset) {
+        if (!asset || asset.__error) return asset;
+
+        return {
+            assetId: asset.assetId || asset.id || '',
+            name: asset.name || asset.displayName || asset.title || '',
+            assetType: asset.assetType || '',
+            seasonNumber: asset.seasonNumber || asset.season_number || asset.season || null,
+            episodeNumber: asset.episodeNumber || asset.episode_number || asset.episode || asset.number || null,
+            duration: asset.duration || null,
+            releaseDate: asset.releaseDate || asset.release_date || null,
+            images: asArray(asset.images).slice(0, 2)
+        };
+    }
+
+    function formatDebugError(error) {
+        return {
+            message: error && error.message ? error.message : String(error),
+            status: error && (error.status || error.decode_code) || null,
+            body: error && error.body || null
+        };
+    }
+
     function mapLampaEpisode(episode, season, index, card) {
         var mapped = mapAsset(episode);
         var raw = mapped.raw || episode || {};

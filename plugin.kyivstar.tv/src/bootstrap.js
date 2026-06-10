@@ -27,6 +27,9 @@
                 catalogDebug: function (areaId) {
                     return catalogDebug(new KyivstarApi(), areaId);
                 },
+                dumpSeasons: function (assetId, seasons) {
+                    return debugKyivstarSeasons(new KyivstarApi(), assetId, seasons);
+                },
                 clearLogs: function () {
                     clearDebugLogs();
                 }
