@@ -297,15 +297,17 @@
         return arrayFromAny(seasons).map(function (season, index) {
             var number = seasonNumber(season);
             var episodes = seasonEpisodeCount(season);
-
-            return {
+            var normalized = {
                 id: season && (season.id || season.assetId) || number || index + 1,
                 name: season && (season.name || season.title) || (t('season_prefix') + number),
                 season_number: number,
-                episode_count: episodes,
                 air_date: season && (season.releaseDate || season.release_date || season.air_date) || '',
                 poster_path: season && (season.poster_path || season.image || pickImage(season.images)) || ''
             };
+
+            if (episodes) normalized.episode_count = episodes;
+
+            return normalized;
         });
     }
 
