@@ -951,10 +951,12 @@
             patchKyivstarFullLabels(event.body, movie);
             patchUnknownEpisodeCountLabels(event.body, movie);
             patchDanglingFullSeparators(event.body);
+            patchKyivstarFullBackdrop(event.body, movie);
             setTimeout(function () {
                 patchKyivstarFullLabels(event.body, movie);
                 patchUnknownEpisodeCountLabels(event.body, movie);
                 patchDanglingFullSeparators(event.body);
+                patchKyivstarFullBackdrop(event.body, movie);
             }, 250);
         });
 
@@ -1206,6 +1208,35 @@
                 status: error.status || error.decode_code || ''
             });
         });
+    }
+
+    function patchKyivstarFullBackdrop(body, movie) {
+        var root = $(body);
+        var background = movie && movie.background_image || movie && movie.kyivstar_backdrop || '';
+        var escaped;
+        var target;
+
+        if (!background) return;
+
+        escaped = cssUrl(background);
+
+        root.find('img').filter(function () {
+            return String($(this).attr('src') || '').indexOf('img_broken.svg') !== -1;
+        }).attr('src', background);
+
+        root.find('*').filter(function () {
+            return String($(this).css('background-image') || '').indexOf('img_broken.svg') !== -1;
+        }).css('background-image', 'url("' + escaped + '")');
+
+        target = root.find('.full-start-new, .full-start, .full').eq(0);
+        if (target.length) {
+            target.css({
+                'background-image': 'linear-gradient(90deg, rgba(0,0,0,.62), rgba(0,0,0,.25) 45%, rgba(0,0,0,.08)), url("' + escaped + '")',
+                'background-size': 'cover',
+                'background-position': 'center center',
+                'background-repeat': 'no-repeat'
+            });
+        }
     }
 
     function seasonNumber(season) {
@@ -1804,8 +1835,9 @@
             poster: image,
             img: image,
             background_image: background,
+            kyivstar_backdrop: background,
             poster_path: '',
-            backdrop_path: background || '',
+            backdrop_path: '',
             _kyivstar: item
         };
 
@@ -3527,6 +3559,10 @@
         } catch (error) {
             return String(value);
         }
+    }
+
+    function cssUrl(value) {
+        return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     }
 
     function applyProxy(url) {

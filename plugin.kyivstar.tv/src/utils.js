@@ -103,6 +103,10 @@
         }
     }
 
+    function cssUrl(value) {
+        return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
     function applyProxy(url) {
         var proxy = setting(KEYS.proxy);
         if (!proxy) return url;
